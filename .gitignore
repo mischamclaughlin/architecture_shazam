@@ -1,0 +1,9 @@
+# ./.gitignore
+
+
+# System generated
+.idea
+/__pycache__
+
+# Virtual Environment
+/env_archi_shazam
