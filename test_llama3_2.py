@@ -9,7 +9,7 @@ audio_info = analyse_tune(file)
 print(audio_info)
 print('\n')
 
-llm = 'deepseek-r1:14b'
+llm = 'llama3.2:latest'
 description = generate_description(audio_info, llm)
 print(description)
 
