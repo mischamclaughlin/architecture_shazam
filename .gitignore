@@ -7,3 +7,9 @@
 
 # Virtual Environment
 /env_archi_shazam
+
+# Image Saving Directory
+/generated_images
+
+# Models
+/models
