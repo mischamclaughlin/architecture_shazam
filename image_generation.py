@@ -1,18 +1,15 @@
 # ./image_generation.py
+import os, time, json
+from datetime import datetime
+import torch
 from tune_analysis import analyse_tune
 from model_prompt import generate_description
 from diffusers import StableDiffusionXLPipeline
-from transformers import CLIPTokenizer
-import torch
 from summarise_output import summarise
-import os
-from datetime import datetime
-import time
-import json
 
 start_time = time.time()
 
-tune_file = './tunes/the_lion_king.mp3'
+tune_file = "./tunes/the_lion_king.mp3"
 # tune_file = "./tunes/house_lo.mp3"
 
 audio_info = analyse_tune(tune_file)
@@ -29,7 +26,6 @@ for model in models:
     end = time.time()
     total = end - start
     print(f"Total time taken for {model} description: {total:.2f} seconds\n")
-
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 pipe = StableDiffusionXLPipeline.from_pretrained(
@@ -60,7 +56,12 @@ num_inference = 25
 for model in summaries:
     start = time.time()
     # Generate image
-    image = pipe(prompt=summaries[model], num_inference_steps=num_inference).images[0]
+    image = pipe(
+        prompt=summaries[model],
+        # height=512,
+        # width=512,
+        num_inference_steps=num_inference,
+    ).images[0]
 
     # Save image
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
