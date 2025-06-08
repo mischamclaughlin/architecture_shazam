@@ -1,25 +1,33 @@
 # ./summarise_output.py
-import subprocess
-from diffusers import StableDiffusionXLPipeline
-from transformers import CLIPTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 
-_tokenizer = CLIPTokenizer.from_pretrained(
-    "stabilityai/stable-diffusion-xl-base-1.0", subfolder="tokenizer"
+# Path to the folder cloned & pulled LFS into
+LOCAL_MODEL_PATH = "models/mistral-7b-instruct-v0.3"
+
+# Load the tokenizer
+tokenizer = AutoTokenizer.from_pretrained(
+    LOCAL_MODEL_PATH, local_files_only=True, use_slow=True
 )
-_model_max_len = _tokenizer.model_max_length
+
+model = AutoModelForCausalLM.from_pretrained(
+    LOCAL_MODEL_PATH,
+    device_map="auto",
+    torch_dtype=torch.float16,
+    local_files_only=True,
+)
+model.eval()
 
 
 def summarise(raw_description: str) -> str:
-    # Build the prompt that instructs Llama3.2 to summarise the longer description and keep it under 77 tokens
-    system_prompt = f"""
-	Rewrite the following “overall look” section from the description into a visual prompt for Stable Diffusion XL.
-	It has to depicts the entire building exterior—massing, roofline, elevation and context—rather.
+    prompt = f"""
+	Rewrite the following “overall look” description into a visual prompt for Stable Diffusion XL that depicts the entire building exterior—massing, roofline, elevation and context—rather than just a façade.
 
 	Use vivid, concrete language to describe the full structure's form, materials, textures and overall silhouette from base to roof.
 
 	Avoid interior details, abstract emotions or partial close-ups.
 
-	Keep it concise and focused, max 70 tokens.
+	Keep it concise and focused, max 65 tokens.
 
 	Description:
 	{raw_description}
@@ -27,20 +35,12 @@ def summarise(raw_description: str) -> str:
 	Return only the image prompt. No extra commentary.
 	""".strip()
 
-    # Call Llama3.2 via Ollama
-    result = subprocess.run(
-        ["ollama", "run", "llama3.2:latest"],
-        input=system_prompt,
-        capture_output=True,
-        text=True,
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=75,
+        do_sample=False,
+        eos_token_id=tokenizer.eos_token_id,
     )
-    if result.returncode != 0:
-        raise RuntimeError(f"Ollama failed:\n{result.stderr.strip()}")
-
-    raw_output = result.stdout.strip()
-
-    encoded = _tokenizer(raw_output, max_length=_model_max_len, truncation=True)
-    truncated_ids = encoded.input_ids
-    final_prompt = _tokenizer.decode(truncated_ids, skip_special_tokens=True).strip()
-
-    return final_prompt
+    gen = outputs[0][inputs["input_ids"].shape[-1] :]
+    return tokenizer.decode(gen, skip_special_tokens=True).strip()
