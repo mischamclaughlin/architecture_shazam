@@ -2,7 +2,7 @@
 import subprocess
 
 
-def generate_description(audio_tags: str, model: str) -> str:
+def generate_description(audio_tags: dict, model: str) -> str:
     prompt = f"""
 	You are an expert architectural designer. 
 	Design a concise exterior concept for a building, using all of the following musical analytics. 
@@ -31,6 +31,9 @@ def generate_description(audio_tags: str, model: str) -> str:
 	""".strip()
 
     results = subprocess.run(
-        ["ollama", "run", model], input=prompt, capture_output=True, text=True
+        ["ollama", "run", model],
+        input=prompt,
+        capture_output=True,
+        text=True
     )
     return results.stdout.strip()
