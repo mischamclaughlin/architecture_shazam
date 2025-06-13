@@ -2,7 +2,10 @@
 import os, time, json
 from datetime import datetime
 import torch
-from tune_analysis import analyse_tune
+from librosa_analysis import analyse_features
+from yamnet_analysis import analyse_yamnet
+from genres_analysis import get_genre
+from instruments_analysis import get_instruments
 from model_prompt import generate_description
 from diffusers import StableDiffusionXLPipeline
 from summarise_output import summarise
@@ -12,14 +15,20 @@ start_time = time.time()
 tune_file = "./tunes/the_lion_king.mp3"
 # tune_file = "./tunes/house_lo.mp3"
 
-audio_info = analyse_tune(tune_file)
-print(audio_info, "\n")
+librosa_info = analyse_features(tune_file)
+print(librosa_info, "\n")
+yamnet_info = analyse_yamnet(tune_file)
+print(yamnet_info, "\n")
+genre_info = get_genre(tune_file)
+print(genre_info, "\n")
+instrument_info = get_instruments(file_path=tune_file)
+print(instrument_info, "\n")
 
 models = ["llama3.2:latest", "deepseek-r1:8b", "deepseek-r1:14b"]
 model_description = {}
 for model in models:
     start = time.time()
-    description = generate_description(audio_info, model)
+    description = generate_description(librosa_info, yamnet_info, genre_info, instrument_info, model)
     print(f"{model.title()}: {description}")
     model_description[model] = description
 
@@ -78,7 +87,7 @@ for model in summaries:
     metadata = {
         "model": model,
         "timestamp": timestamp,
-        "audio_tags": audio_info,
+        "audio_tags": librosa_info,
         "llm_description": model_description[model],
         "sdxl_prompt": summaries[model],
         "num_inference_steps": num_inference,
