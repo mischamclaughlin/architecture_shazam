@@ -2,38 +2,32 @@
 import subprocess
 
 
-def generate_description(audio_tags: dict, model: str) -> str:
+def generate_description(
+    librosa_tags: dict, genre_tags: list, instrument_tags: list, model: str
+) -> str:
     prompt = f"""
-	You are an expert architectural designer. 
-	Design a concise exterior concept for a building, using all of the following musical analytics. 
-	Explain how each feature informs your form-making, material choices, and façade details.
+	You are an expert architectural designer.
+	Design a concise exterior concept for a building, using the following musical analytics:
 
-	Music features:
-		- Tempo (global): {audio_tags['tempo_global']} BPM
-		- Tempo (mean, local): {audio_tags['tempo_mean_local']} BPM
-		- Tempo (median, local): {audio_tags['tempo_median_local']} BPM
-		- Mean spectral bandwidth: {audio_tags['mean_bandwidth']}
-		- Median spectral bandwidth: {audio_tags['median_bandwidth']}
-		- Std dev of bandwidth: {audio_tags['std_bandwidth']}
-		- Key: {audio_tags['key']}
-		- Spectral centroid: {audio_tags.get('mean_centroid', 'N/A')}
-		- Mean RMS: {audio_tags.get('mean_rms', 'N/A')}
-		- MFCC means: {', '.join(str(audio_tags.get(f'mfcc{i}_mean', '-')) for i in range(1, 14))}
+	- Tempo: {librosa_tags['tempo_global']} BPM
+	- Key: {librosa_tags['key']}
+	- Genre: {', '.join([g for g,_ in genre_tags])}
+	- Instruments: {', '.join([i for i,_ in instrument_tags])}
+	- Timbre: {librosa_tags['timbre']}
+	- Loudness: {librosa_tags['loudness']}
 
 	Instructions:
-		1. Write a one-sentence concept statement.  
-		2. In three bullet points, explain how you translate:  
-			- Rhythm & pacing into massing & form.  
-			- Tonal colour & texture into material palette & façade brightness.  
-			- Energy & timbre into façade articulation or pattern.  
-		3. Write a 3-4 sentence “Overall look” summary (imagine a headline in an architecture magazine).
-	Keep your response under 500 words.
+	1. One-sentence concept statement.
+	2. Three bullets explaining how you translated:
+		- Rhythm → massing & form
+		- Tonal colour → material palette & façade brightness
+		- Energy & timbre → façade articulation
+	3. A 3-4 sentence magazine-style “Overall look” summary.
+	Keep it under 500 words.
 	""".strip()
 
     results = subprocess.run(
-        ["ollama", "run", model],
-        input=prompt,
-        capture_output=True,
-        text=True
+        ["ollama", "run", model], input=prompt, capture_output=True, text=True
     )
+    print(prompt)
     return results.stdout.strip()
