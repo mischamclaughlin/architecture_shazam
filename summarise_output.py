@@ -1,25 +1,8 @@
 # ./summarise_output.py
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-
-# Path to the folder cloned & pulled LFS into
-LOCAL_MODEL_PATH = "models/mistral-7b-instruct-v0.3"
-
-# Load the tokenizer
-tokenizer = AutoTokenizer.from_pretrained(
-    LOCAL_MODEL_PATH, local_files_only=True, use_slow=True
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    LOCAL_MODEL_PATH,
-    device_map="auto",
-    torch_dtype=torch.float16,
-    local_files_only=True,
-)
-model.eval()
+from ollama import chat, ResponseError
 
 
-def summarise(raw_description: str) -> str:
+def summarise(raw_description: str, llm="deepseek-r1:8b", max_tokens=75) -> str:
     prompt = f"""
 	Rewrite the following “overall look” description into a visual prompt for Stable Diffusion XL that depicts the entire building exterior—massing, roofline, elevation and context—rather than just a façade.
 
@@ -27,7 +10,7 @@ def summarise(raw_description: str) -> str:
 
 	Avoid interior details, abstract emotions or partial close-ups.
 
-	Keep it concise and focused, max 65 tokens.
+	Keep it concise and focused, max 75 tokens.
 
 	Description:
 	{raw_description}
@@ -35,12 +18,27 @@ def summarise(raw_description: str) -> str:
 	Return only the image prompt. No extra commentary.
 	""".strip()
 
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=75,
-        do_sample=False,
-        eos_token_id=tokenizer.eos_token_id,
-    )
-    gen = outputs[0][inputs["input_ids"].shape[-1] :]
-    return tokenizer.decode(gen, skip_special_tokens=True).strip()
+    try:
+        # call the Ollama chat endpoint directly
+        response = chat(
+            model=llm,
+            messages=[{"role": "user", "content": prompt}],
+            think=False,
+            options={"temperature": 0.0, "num_predict": max_tokens},
+        )
+        # response is a dict-like; grab the content string
+        image_text = response["message"]["content"].strip()
+    except ResponseError as e:
+        # Ollama API errors
+        print(f"Ollama API error ({e.status_code}): {e.error}")
+        return ""
+
+    text = truncate_to_last_sentence(image_text)
+    return text
+
+
+def truncate_to_last_sentence(text: str) -> str:
+    idx = max(text.rfind("."), text.rfind("!"), text.rfind("?"))
+    if idx != -1 and idx < len(text) - 1:
+        return text[: idx + 1]
+    return text
