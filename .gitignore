@@ -1,12 +1,16 @@
 # ./.gitignore
 
+# Ignore Python virtualenvs
+env_archi_shazam/
+archi_shazam_python31111/
+venv/
+__pycache__/
 
-# System generated
-.idea
-/__pycache__
-
-# Virtual Environment
-/env_archi_shazam
+# Ignore generated outputs
+generated_images/
+output/
+params.json
+*.blend
 
 # Image Saving Directory
 /generated_images
