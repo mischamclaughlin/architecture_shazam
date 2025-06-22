@@ -17,6 +17,8 @@ params.json
 
 # Models
 /models
+/shap-e
+/shap_e_model_cache
 
 # Tunes
 /tunes
