@@ -1,0 +1,25 @@
+# ./.dockerignore
+
+# Ignore Python virtualenvs
+env_archi_shazam/
+env_archi_shazam_python31111/
+venv/
+__pycache__/
+
+# Ignore generated outputs
+generated_images/
+output/
+params.json
+*.blend
+
+# Ignore Git metadata
+.git
+
+# Image Saving Directory
+/generated_images
+
+# Models
+/models
+
+# Tunes
+/tunes
