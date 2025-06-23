@@ -1,8 +1,8 @@
-# ./summarise_output.py
+# ./summarise_prompt.py
 from ollama import chat, ResponseError
 
 
-def summarise(raw_description: str, llm="deepseek-r1:8b", max_tokens=75) -> str:
+def summarise_for_image(raw_description: str) -> str:
     prompt = f"""
 	Rewrite the following “overall look” description into a visual prompt for Stable Diffusion XL that depicts the entire building exterior—massing, roofline, elevation and context—rather than just a façade.
 
@@ -18,11 +18,36 @@ def summarise(raw_description: str, llm="deepseek-r1:8b", max_tokens=75) -> str:
 	Return only the image prompt. No extra commentary.
 	""".strip()
 
+    summary = call_ollama(prompt)
+    summary_cut = truncate_to_last_sentence(summary)
+    return summary_cut
+
+
+def summarise_for_3D(raw_description: str) -> str:
+    prompt = f"""
+    Rewrite the following “overall look” into a concise 3D prompt specifying full exterior massing, roofline, context and PBR materials, low-poly UV-unwrapped geometry with separate material IDs, suitable for OBJ/FBX export.
+
+    Avoid interiors, emotions, close-ups.
+
+    Keep it under 75 tokens.
+
+    Description:
+    {raw_description}
+
+    Return only the 3D prompt.
+    """.strip()
+
+    summary = call_ollama(prompt)
+    summary_cut = truncate_to_last_sentence(summary)
+    return summary_cut
+
+
+def call_ollama(input_prompt: str, llm: str = "deepseek-r1:14b", max_tokens=75):
     try:
         # call the Ollama chat endpoint directly
         response = chat(
             model=llm,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": input_prompt}],
             think=False,
             options={"temperature": 0.0, "num_predict": max_tokens},
         )
