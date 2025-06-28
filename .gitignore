@@ -1,8 +1,7 @@
 # ./.gitignore
 
 # Ignore Python virtualenvs
-env_archi_shazam/
-archi_shazam_python31111/
+arch_shazam/
 venv/
 __pycache__/
 
