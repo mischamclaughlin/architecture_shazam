@@ -10,9 +10,9 @@ generated_images/
 output/
 params.json
 *.blend
-
-# Image Saving Directory
 /generated_images
+/outputs
+
 
 # Models
 /models
@@ -21,3 +21,8 @@ params.json
 
 # Tunes
 /tunes
+
+# 3D outputs
+*.obj
+*.glb
+*.ply
