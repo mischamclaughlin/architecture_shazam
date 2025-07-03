@@ -5,11 +5,8 @@ from ollama import chat, ResponseError
 def summarise_for_image(raw_description: str) -> str:
     prompt = f"""
 	Rewrite the following “overall look” description into a visual prompt for Stable Diffusion XL that depicts the entire building exterior—massing, roofline, elevation and context—rather than just a façade.
-
 	Use vivid, concrete language to describe the full structure's form, materials, textures and overall silhouette from base to roof.
-
 	Avoid interior details, abstract emotions or partial close-ups.
-
 	Keep it concise and focused, max 75 tokens.
 
 	Description:
@@ -25,16 +22,15 @@ def summarise_for_image(raw_description: str) -> str:
 
 def summarise_for_3D(raw_description: str) -> str:
     prompt = f"""
-    Rewrite the following “overall look” into a concise 3D prompt specifying full exterior massing, roofline, context and PBR materials, low-poly UV-unwrapped geometry with separate material IDs, suitable for OBJ/FBX export.
-
-    Avoid interiors, emotions, close-ups.
-
-    Keep it under 75 tokens.
+    Convert the following description into a concise 3D modelling prompt (<75 tokens) that specifies:
+    - Full exterior massing & roofline
+    - Context/environment
+    - PBR materials
+    - Low-poly UV-unwrapped geometry with separate material IDs
+    Suitable for OBJ/FBX export. Omit interiors, emotions, and close-ups.
 
     Description:
     {raw_description}
-
-    Return only the 3D prompt.
     """.strip()
 
     summary = call_ollama(prompt)
