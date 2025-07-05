@@ -1,108 +1,197 @@
-# ./image_generation.py
-import os, time, json
+import argparse
+import json
+import logging
+from dataclasses import dataclass, asdict
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional, cast
+
 import torch
-from librosa_analysis import analyse_features
-from yamnet_analysis import analyse_yamnet
-from genres_analysis import get_genre
-from instruments_analysis import get_instruments
-from model_prompt import generate_description
-from diffusers import StableDiffusionXLPipeline
-from summarise_output import summarise
+from PIL import Image
+from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import (
+    StableDiffusionXLPipeline,
+)
+from diffusers.pipelines.stable_diffusion_xl.pipeline_output import (
+    StableDiffusionXLPipelineOutput,
+)
 
-start_time = time.time()
+from logger import default_logger
 
-tune_file = "./tunes/the_lion_king.mp3"
-# tune_file = "./tunes/house_lo.mp3"
 
-librosa_info = analyse_features(tune_file)
-print(librosa_info, "\n")
-yamnet_info = analyse_yamnet(tune_file)
-print(yamnet_info, "\n")
-genre_info = get_genre(tune_file)
-print(genre_info, "\n")
-instrument_info = get_instruments(file_path=tune_file)
-print(instrument_info, "\n")
+@dataclass
+class ImageMetadata:
+    model: str
+    timestamp: str
+    audio_tags: Dict[str, Any]
+    llm_description: str
+    sdxl_prompt: str
+    num_inference_steps: int
+    device: str
 
-models = ["llama3.2:latest", "deepseek-r1:8b", "deepseek-r1:14b"]
-model_description = {}
-for model in models:
-    start = time.time()
-    description = generate_description(librosa_info, yamnet_info, genre_info, instrument_info, model)
-    print(f"{model.title()}: {description}")
-    model_description[model] = description
 
-    end = time.time()
-    total = end - start
-    print(f"Total time taken for {model} description: {total:.2f} seconds\n")
+class GenerateImage:
+    """
+    Generate and save Stable Diffusion XL images for a song, plus metadata.
+    """
 
-device = "mps" if torch.backends.mps.is_available() else "cpu"
-pipe = StableDiffusionXLPipeline.from_pretrained(
-    "stabilityai/stable-diffusion-xl-base-1.0",
-    torch_dtype=torch.float32,
-    variant=None,
-).to(device)
+    def __init__(
+        self,
+        llm: str,
+        song_name: str,
+        img_prompt: str,
+        num_inference_steps: int,
+        model_name: str = "stabilityai/stable-diffusion-xl-base-1.0",
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
+        """
+        Initialise with LLM name, song identifier, image prompt, inference steps, SDXL model and logger.
+        """
+        self.llm = llm
+        self.song_name = song_name
+        self.img_prompt = img_prompt
+        self.num_inference_steps = num_inference_steps
+        self.model_name = model_name
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.device = self.pick_device()
+        self.logger = logger or default_logger(__name__)
 
-print("Tokenizer model max length:", pipe.tokenizer.model_max_length)
-print("Text encoder:", pipe.text_encoder.__class__.__name__)
+        # Safe directory naming
+        safe_model = self.model_name.replace("/", "_").replace(":", "_")
+        self.save_dir = Path("generated_images") / self.song_name / safe_model
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        self._pipe: Optional[StableDiffusionXLPipeline] = None
 
-# Warm-up (improves first-time speed)
-pipe(prompt="warmup", num_inference_steps=1)
+    def pick_device(self) -> torch.device:
+        """
+        Select the best available device: CUDA > MPS > CPU.
+        """
+        if torch.cuda.is_available():
+            dev = torch.device("cuda")
+        elif torch.backends.mps.is_available():  # type: ignore
+            dev = torch.device("mps")
+        else:
+            dev = torch.device("cpu")
+        print(f"Using device: {dev}")
+        return dev
 
-# Get summaries from longer description
-summaries = {}
-for model in model_description:
-    start = time.time()
-    summary = summarise(model_description[model])
-    summaries[model] = summary
-    print(f"{model.title()}: {summary}")
+    def load_model(self) -> StableDiffusionXLPipeline:
+        """
+        Lazy-load the Stable Diffusion XL pipeline and warm up.
+        """
+        if self._pipe is None:
+            self.logger.info(f"Loading SDXL model: {self.model_name} on {self.device}")
+            pipe = StableDiffusionXLPipeline.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.float32,
+            )
+            pipe = pipe.to(self.device)
+            # warm up
+            pipe(prompt="warmup", num_inference_steps=1)
+            self._pipe = pipe
+        assert self._pipe is not None
+        return self._pipe
 
-    end = time.time()
-    total = end - start
-    print(f"Total time taken for {model} summary: {total:.2f} seconds\n")
+    def create_image(self) -> Image.Image:
+        """
+        Generate an image from the prompt using SDXL.
+        """
+        try:
+            pipe = self.load_model()
+            raw_output = pipe(
+                prompt=self.img_prompt,
+                num_inference_steps=self.num_inference_steps,
+                return_dict=True,
+            )
+            result = cast(StableDiffusionXLPipelineOutput, raw_output)
+            image = result.images[0]
+            return image
+        except Exception as e:
+            self.logger.error(f"Image generation failed: {e}")
+            raise
 
-num_inference = 25
-for model in summaries:
-    start = time.time()
-    # Generate image
-    image = pipe(
-        prompt=summaries[model],
-        # height=512,
-        # width=512,
-        num_inference_steps=num_inference,
-    ).images[0]
+    def save_image(self) -> Path:
+        """
+        Generate and save the image, returning the file path.
+        """
+        img = self.create_image()
+        image_filename = f"{self.song_name}_{self.timestamp}.png"
+        image_path = self.save_dir / image_filename
+        img.save(image_path)
+        self.logger.info(f"Image saved to {image_path}")
+        return image_path
 
-    # Save image
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_model = model.replace(":", "_")
-    # save_dir = os.path.abspath(f"./generated_images/house_lo/{safe_model}")
-    save_dir = os.path.abspath(f"./generated_images/lion_king/{safe_model}")
-    os.makedirs(save_dir, exist_ok=True)
+    def save_metadata(
+        self,
+        audio_tags: Dict[str, Any],
+        llm_description: str,
+        sdxl_prompt: str,
+    ) -> Path:
+        """
+        Save metadata about the generation to a JSON file, returning its path.
+        """
+        meta = ImageMetadata(
+            model=self.llm,
+            timestamp=self.timestamp,
+            audio_tags=audio_tags,
+            llm_description=llm_description,
+            sdxl_prompt=sdxl_prompt,
+            num_inference_steps=self.num_inference_steps,
+            device=str(self.device),
+        )
+        json_path = self.save_dir / f"metadata_{self.timestamp}.json"
+        json_path.write_text(json.dumps(asdict(meta), indent=2), encoding="utf-8")
+        self.logger.info(f"Metadata saved to {json_path}")
+        return json_path
 
-    image_filename = f"{safe_model}_{timestamp}.png"
-    image_path = os.path.join(save_dir, image_filename)
-    image.save(image_path)
 
-    # Get JSON info and save to metadata
-    metadata = {
-        "model": model,
-        "timestamp": timestamp,
-        "audio_tags": librosa_info,
-        "llm_description": model_description[model],
-        "sdxl_prompt": summaries[model],
-        "num_inference_steps": num_inference,
-        "device": device,
-    }
-    json_filename = f"{safe_model}_{timestamp}.json"
-    json_path = os.path.join(save_dir, json_filename)
-    with open(json_path, "w", encoding="utf-8") as fp:
-        json.dump(metadata, fp, ensure_ascii=False, indent=2)
+# Test from command line
+def main():
+    """
+    CLI entry point for generating an image and metadata.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate SDXL images for a song and save metadata."
+    )
+    parser.add_argument(
+        "--llm", required=True, help="Name of the LLM used for descriptions."
+    )
+    parser.add_argument("--song-name", required=True, help="Identifier for the song.")
+    parser.add_argument("--prompt", required=True, help="Image prompt for SDXL.")
+    parser.add_argument(
+        "--steps", type=int, default=50, help="Number of inference steps."
+    )
+    parser.add_argument(
+        "--model-name",
+        default="stabilityai/stable-diffusion-xl-base-1.0",
+        help="SDXL model checkpoint to use.",
+    )
+    parser.add_argument(
+        "--metadata-json",
+        type=Path,
+        help="Path to JSON file with audio_tags, llm_description, and sdxl_prompt.",
+    )
+    args = parser.parse_args()
 
-    end = time.time()
-    total = end - start
-    print(f"Saved {image_filename} and {json_filename} in {save_dir}")
-    print(f"Total time taken for {model} image: {total:.2f} seconds\n")
+    # Load metadata inputs if provided
+    audio_tags: Dict[str, Any] = {}
+    llm_description: str = ""
+    sdxl_prompt: str = args.prompt
+    if args.metadata_json:
+        data = json.loads(args.metadata_json.read_text(encoding="utf-8"))
+        audio_tags = data.get("audio_tags", {})
+        llm_description = data.get("llm_description", "")
 
-end_time = time.time()
-elapsed_time = end_time - start_time
-print(f"Time taken for whole process: {elapsed_time:.2f} seconds.")
+    generator = GenerateImage(
+        llm=args.llm,
+        song_name=args.song_name,
+        img_prompt=args.prompt,
+        num_inference_steps=args.steps,
+        model_name=args.model_name,
+    )
+    image_path = generator.save_image()
+    metadata_path = generator.save_metadata(audio_tags, llm_description, sdxl_prompt)
+    print(f"Done. Image: {image_path}, Metadata: {metadata_path}")
+
+
+if __name__ == "__main__":
+    main()
