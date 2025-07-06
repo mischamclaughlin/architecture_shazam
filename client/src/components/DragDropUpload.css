@@ -1,0 +1,29 @@
+/* ./client/src/components/DragDropUpload.css */
+.dropzone {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    color: #555;
+    user-select: none;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.dropzone.active {
+    border-color: #007acc;
+    color: #007acc;
+}
+
+.file-name {
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+.error {
+    background-color: red;
+    color: white;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    margin-top: 1rem;
+}
