@@ -9,13 +9,13 @@ from instruments_analysis import get_instruments
 def get_features(tune: str) -> str:
     librosa_info = analyse_features(tune)
     print(librosa_info, "\n")
-    
+
     # yamnet_info = analyse_yamnet(tune)
     # print(yamnet_info, "\n")
-    
+
     genre_info = get_genre(tune)
     print(genre_info, "\n")
-    
+
     instrument_info = get_instruments(file_path=tune)
     print(instrument_info, "\n")
 
