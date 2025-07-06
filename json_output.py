@@ -4,7 +4,7 @@ from ollama import chat, ResponseError
 from librosa_analysis import analyse_features
 from genres_analysis import get_genre
 from instruments_analysis import get_instruments
-from model_prompt import generate_description
+from description_prompt import generate_description
 
 tune_file = "./tunes/the_lion_king.mp3"
 
