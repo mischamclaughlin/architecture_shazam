@@ -1,5 +1,5 @@
 # ./visualise.py
 import trimesh
 
-mesh = trimesh.load("house_mesh.glb")
+mesh = trimesh.load("outputs/meshes/coarse_model.obj")
 mesh.show()
