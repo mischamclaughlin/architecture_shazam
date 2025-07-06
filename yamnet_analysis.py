@@ -6,11 +6,14 @@ import tensorflow_hub as hub
 import librosa
 
 
-# Load once
+# Load model once
 YAMNET_MODEL = hub.load("https://tfhub.dev/google/yamnet/1")
 
 
-def analyse_yamnet(file_path: str):
+def analyse_yamnet(file_path: str, threshold: float = 0.02) -> list:
+    """
+    Gets sound events from file and returns ones over the threshold.
+    """
     # Load & prep audio
     wav, sr = librosa.load(file_path, sr=None, mono=False)
     if sr != 16000:
@@ -34,7 +37,6 @@ def analyse_yamnet(file_path: str):
     # Aggregate and pick top-5
     mean_scores = tf.reduce_mean(scores, axis=0).numpy()
 
-    threshold = 0.02
     filtered = []
     for idx, score in enumerate(mean_scores):
         if score >= threshold:

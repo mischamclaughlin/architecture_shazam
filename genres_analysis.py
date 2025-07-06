@@ -1,5 +1,5 @@
 # ./genres_analysis.py
-from transformers import pipeline
+from transformers.pipelines import pipeline
 
 # Load the genre classification pipeline once
 MODEL_ID = "dima806/music_genres_classification"
