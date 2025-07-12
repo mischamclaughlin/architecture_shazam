@@ -1,0 +1,24 @@
+/* ./client/src/components/Navbar.css */
+.navbar-menu {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid black;
+    color: white;
+    background-color: black;
+    border-radius: 0.5rem;
+}
+
+.navbar-menu h1 {
+    padding: 0;
+    margin: 0;
+}
+
+.navbar-menu a {
+    padding: 0;
+    margin: 0;
+    text-decoration: none;
+    color: white;
+    font-weight: bold;
+}
