@@ -1,0 +1,33 @@
+/* ./client/src/pages/HomePage.css */
+.file-upload-area {
+    margin: 0.5rem 0;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    background-color: rgba(200, 200, 200, 0.25);
+    border-radius: 0.5rem;
+}
+
+.file-upload-area h2 {
+    margin: 0;
+    padding: 0;
+}
+
+.generate-button {
+    all: unset;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    background-color: black;
+    color: white;
+    border: 1px solid black;
+    cursor: pointer;
+}
+
+.generate-button:hover {
+    background-color: white;
+    border: 1px solid black;
+    color: black;
+    box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.5);
+}
