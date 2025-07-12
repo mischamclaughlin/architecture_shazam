@@ -1,12 +1,4 @@
 /* ./client/src/index.css */
-header {
-  text-align: center;
-  border-bottom: 1px solid black;
-}
-
-.file-upload {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
+* {
+    box-sizing: border-box;
 }
