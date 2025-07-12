@@ -1,8 +1,11 @@
 // src/components/DragDropUpload.jsx
 import React, { useRef, useState } from 'react';
-import './DragDropUpload.css'
+import './DragDropUpload.css';
 
-export default function DragDropUpload({ uploadUrl = '/api/upload' }) {
+export default function DragDropUpload({
+    onFileSelect,
+    accept = '.mp3,.wav'
+}) {
     const inputRef = useRef();
     const [fileName, setFileName] = useState('');
     const [dragActive, setDragActive] = useState(false);
@@ -10,7 +13,7 @@ export default function DragDropUpload({ uploadUrl = '/api/upload' }) {
 
     const isValidAudio = file => {
         const allowedTypes = ['audio/mpeg', 'audio/wav'];
-        const allowedExts = ['.mp3', '.wav']
+        const allowedExts = ['.mp3', '.wav'];
         const { type, name } = file;
         const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
         return allowedTypes.includes(type) && allowedExts.includes(ext);
@@ -23,46 +26,24 @@ export default function DragDropUpload({ uploadUrl = '/api/upload' }) {
         }
         setError('');
         setFileName(file.name);
-        uploadFile(file);
+        onFileSelect(file);
     };
 
     const handleClick = () => inputRef.current.click();
     const handleChange = e => {
         const file = e.target.files[0];
-        if (file) handleFile(file)
+        if (file) handleFile(file);
     };
 
     const handleDrag = e => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.type === 'dragenter' || e.type === 'dragover') {
-            setDragActive(true);
-        } else if (e.type === 'dragleave') {
-            setDragActive(false);
-        }
+        e.preventDefault(); e.stopPropagation();
+        setDragActive(e.type === 'dragenter' || e.type === 'dragover');
     };
-
     const handleDrop = e => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         setDragActive(false);
         const file = e.dataTransfer.files[0];
-        if (file) handleFile(file)
-    };
-
-    const uploadFile = async file => {
-        const form = new FormData();
-        form.append('file', file);
-        try {
-            const res = await fetch(uploadUrl, {
-                method: 'POST',
-                body: form,
-            });
-            if (!res.ok) throw new Error(`Status ${res.status}`);
-        } catch (err) {
-            console.error(err);
-            alert('Upload failed');
-        }
+        if (file) handleFile(file);
     };
 
     return (
@@ -78,20 +59,16 @@ export default function DragDropUpload({ uploadUrl = '/api/upload' }) {
                 <input
                     ref={inputRef}
                     type="file"
-                    accept='.mp3, audio/mpeg, .wav, audio/wav'
+                    accept={accept}
                     style={{ display: 'none' }}
                     onChange={handleChange}
                 />
                 {fileName
-                    ? <p className='file-name'>Selected file: <strong>{fileName}</strong></p>
-                    : <p>Click or drag an MP3/WAV file here to upload</p>
+                    ? <p className="file-name">Selected: <strong>{fileName}</strong></p>
+                    : <p>Click or drag an MP3/WAV here to select</p>
                 }
             </div>
-            {error && (
-                <p className='error'>
-                    {error}
-                </p>
-            )}
+            {error && <p className="error">{error}</p>}
         </div>
     );
 }
