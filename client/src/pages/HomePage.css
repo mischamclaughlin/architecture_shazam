@@ -1,12 +1,13 @@
 /* ./client/src/pages/HomePage.css */
 .file-upload-area {
-    margin: 0.5rem 0;
     padding: 1rem;
+    margin: 1rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1rem;
-    background-color: rgba(200, 200, 200, 0.25);
+    background-color: rgba(170, 170, 170, 0.20);
+    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
     border-radius: 0.5rem;
 }
 
@@ -30,4 +31,9 @@
     border: 1px solid black;
     color: black;
     box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.5);
+}
+
+.gallery-area {
+    margin: 2rem 1rem;
+    text-align: center;
 }
