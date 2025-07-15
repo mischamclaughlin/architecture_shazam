@@ -4,21 +4,41 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem;
-    border-bottom: 1px solid black;
+    background-color: rgba(0, 0, 0, 0.9);
     color: white;
-    background-color: black;
-    border-radius: 0.5rem;
-}
-
-.navbar-menu h1 {
-    padding: 0;
-    margin: 0;
 }
 
 .navbar-menu a {
     padding: 0;
     margin: 0;
     text-decoration: none;
-    color: white;
+    color: rgb(255, 255, 255);
     font-weight: bold;
+}
+
+.nav-title {
+    padding-right: 2rem;
+}
+
+.logout-button {
+    all: unset;
+    cursor: pointer;
+    font-weight: bolder;
+}
+
+.nav-area {
+    display: flex;
+    justify-content: end;
+    align-items: center;
+    gap: 2rem;
+}
+
+.nav-area a,
+.nav-area button {
+    color: rgba(255, 255, 255, 0.70);
+}
+
+.welcome-user {
+    font-weight: bolder;
+    color: rgba(255, 0, 0, 0.85);
 }
