@@ -1,24 +1,35 @@
 // ./client/src/components/ImageWithActions.jsx
 import React, { useState } from "react";
-import './ImageWithActions.css'
+
+import { HiOutlineDownload } from 'react-icons/hi';
+import { BiFullscreen } from 'react-icons/bi';
+
+import './ImageWithActions.css';
 
 export default function ImageWithActions({ src, alt = '' }) {
     const [zoomed, setZoomed] = useState(false)
+    const title = alt.split(/mp3|wav/)[0].replaceAll('_', ' ')
 
     return (
         <div className='image-area'>
-            <h3>Your generated Image</h3>
             <div className="iwa-wrapper">
                 <img className="iwa-img" src={src} alt={alt} />
                 <div className="iwa-overlay">
-                    <a href={src} download className="iwa-button">Download</a>
-                    <button
-                        type="button"
-                        onClick={() => setZoomed(true)}
-                        className="iwa-button"
-                    >
-                        Zoom
-                    </button>
+                    <div className="iwa-title">
+                        <p>{title}</p>
+                    </div>
+                    <div className="iwa-actions">
+                        <a href={src} download className="iwa-button">
+                            <HiOutlineDownload />
+                        </a>
+                        <button
+                            type="button"
+                            onClick={() => setZoomed(true)}
+                            className="iwa-button"
+                        >
+                            <BiFullscreen />
+                        </button>
+                    </div>
                 </div>
             </div>
 
