@@ -18,7 +18,7 @@ export default function StatusMessage({ status }) {
     }, [status]);
 
     return (
-        <p className={`status${show ? ' show' : ''}`}>
+        <p className={`status-success${show ? ' show' : ''}`}>
             {status}
         </p>
     );
