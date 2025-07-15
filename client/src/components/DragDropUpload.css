@@ -1,7 +1,7 @@
 /* ./client/src/components/DragDropUpload.css */
 .dropzone {
     border: 2px dashed #ccc;
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(255, 255, 255, 0.50);
     border-radius: 8px;
     padding: 2rem 3rem;
     text-align: center;
@@ -9,6 +9,10 @@
     color: #555;
     user-select: none;
     transition: border-color 0.2s, color 0.2s;
+}
+
+.dropzone:hover {
+    border-color: #007acc;
 }
 
 .dropzone.active {
