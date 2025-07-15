@@ -64,7 +64,7 @@ class GenerateImage:
 
         # Safe directory naming
         project_root = Path(__file__).parent.parent
-        self.save_dir = project_root / "static" / "images" / self.song_name
+        self.save_dir = project_root / "static" / "images"
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self._pipe: Optional[StableDiffusionXLPipeline] = None
 
