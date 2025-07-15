@@ -7,11 +7,11 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash
 
 
-app = Flask(__name__, static_folder="../static/dist", static_url_path="/static")
+app = Flask(__name__, static_folder="../static/dist", static_url_path="")
 app.jinja_env.undefined = StrictUndefined
 app.config.from_object(Config)
 
-CORS(app)
+CORS(app, supports_credentials=True)
 
 db = SQLAlchemy(app)
 
