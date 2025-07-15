@@ -4,9 +4,9 @@ import traceback
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from flask import request, jsonify, send_from_directory, abort
+from flask import request, jsonify, send_from_directory, abort, url_for
 from flask_cors import CORS
-from flask_login import login_user, login_required, current_user
+from flask_login import login_user, login_required, current_user, logout_user
 from werkzeug.utils import secure_filename
 
 from flask_server import app
@@ -24,11 +24,11 @@ _store = {}
 
 @app.route("/static/images/<path:filename>")
 def serve_generated_image(filename):
-    image_dir = os.path.join(os.path.dirname(__file__), "static", "images")
-    full_path = os.path.join(image_dir, filename)
+    folder = Path(__file__).parent / "static" / "images"
+    full_path = folder / filename
     if not os.path.isfile(full_path):
         return abort(404)
-    return send_from_directory(image_dir, filename)
+    return send_from_directory(str(folder), filename)
 
 
 @app.route("/api/register", methods=["POST"])
@@ -70,8 +70,22 @@ def login():
     return jsonify(status="ok", user={"id": user.id, "username": user.username}), 200
 
 
+@app.route("/api/me")
+def whoami():
+    if not current_user.is_authenticated:
+        return jsonify(user=None), 200
+    return jsonify(user={"id": current_user.id, "username": current_user.username}), 200
+
+
+@app.route("/api/logout", methods=["POST"])
 @login_required
+def logout():
+    logout_user()
+    return jsonify(status="ok"), 200
+
+
 @app.route("/api/analyse", methods=["POST"])
+@login_required
 def analyse():
     try:
         f = request.files.get("file")
@@ -105,8 +119,8 @@ def analyse():
         return jsonify(error=str(e)), 500
 
 
-@login_required
 @app.route("/api/describe", methods=["POST"])
+@login_required
 def describe():
     try:
         data = request.get_json() or {}
@@ -134,8 +148,8 @@ def describe():
         return jsonify(error=str(e)), 500
 
 
-@login_required
 @app.route("/api/render", methods=["POST"])
+@login_required
 def render_image():
     try:
         data = request.get_json() or {}
@@ -157,7 +171,7 @@ def render_image():
             img_prompt=img_prompt,
             num_inference_steps=25,
         )
-        file_path = gen.save_image()
+        filename = gen.save_image()
         gen.save_metadata(
             audio_tags=_store[pid.replace("_p", "")]["librosa"],
             genre_tags=_store[pid.replace("_p", "")]["genre"],
@@ -166,26 +180,38 @@ def render_image():
             sdxl_prompt=img_prompt,
         )
 
-        with open(file_path, "rb") as f:
+        with open(filename, "rb") as f:
             blob = f.read()
 
         img_record = GeneratedImage(
             user_id=current_user.id,
-            filename=file_path.name,
+            filename=filename.name,
             mime_type="image/png",
             data=blob,
         )
         db.session.add(img_record)
         db.session.commit()
 
-        relative = file_path.relative_to(Path(__file__).parent / "static" / "images")
-
         return jsonify(
-            imageUrl=f"/static/images/{relative.as_posix()}", imageId=img_record.id
+            imageUrl=url_for("serve_generated_image", filename=filename),
+            imageId=img_record.id,
         )
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=str(e)), 500
+
+
+@app.route("/api/my_images", methods=["GET"])
+@login_required
+def list_images():
+    imgs = GeneratedImage.query.filter_by(user_id=current_user.id).all()
+    load_imgs = []
+    for img in imgs:
+        url = url_for("serve_generated_image", filename=img.filename)
+        load_imgs.append({"id": img.id, "filename": img.filename, "url": url})
+    load_imgs.reverse()
+
+    return jsonify(images=load_imgs), 200
 
 
 @app.route("/", defaults={"path": ""})

@@ -1,15 +1,17 @@
 // ./client/src/pages/LoginPage.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import './LoginPage.css'
 
-export default function LoginPage() {
+export default function LoginPage({ onLogin }) {
     const [form, setForm] = useState({
         username: '',
         password: '',
     });
     const [error, setError] = useState('');
     const [status, setStatus] = useState('');
+    const navigate = useNavigate();
 
     const handleChange = e => {
         const { name, value } = e.target;
@@ -30,6 +32,7 @@ export default function LoginPage() {
         try {
             const res = await fetch('/api/login', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username: form.username,
@@ -38,6 +41,9 @@ export default function LoginPage() {
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || res.statusText);
+
+            onLogin(json.user)
+            navigate('/')
 
             setStatus('Login successful!');
             setForm({ username: '', password: '' });
