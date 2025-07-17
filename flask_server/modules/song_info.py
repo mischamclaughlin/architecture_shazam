@@ -109,25 +109,12 @@ class ExtractSongInfo:
 
         tempo_info = self.tempo_analysis(y, sr)
         key_str = self.key_analysis(y, sr)
-        bw_info = self.bandwidth_analysis(y, sr)
-        cent_info = self.centroid_analysis(y, sr)
-        rms_info = self.rms_analysis(y)
-        mfcc_info = self.mfccs_analysis(y, sr)
         timbre, loudness = self.describe_timbre_and_loudness(y, sr)
 
         return {
             "tempo_global": round(tempo_info["tempo_global"], 2),
             "tempo_mean_local": round(tempo_info["tempo_mean"], 2),
             "tempo_median_local": round(tempo_info["tempo_median"], 2),
-            "mean_bandwidth": round(bw_info["mean_bw"], 2),
-            "median_bandwidth": round(bw_info["median_bw"], 2),
-            "std_bandwidth": round(bw_info["std_bw"], 2),
-            "mean_centroid": round(cent_info["mean_centroid"], 2),
-            "median_centroid": round(cent_info["median_centroid"], 2),
-            "std_centroid": round(cent_info["std_centroid"], 2),
-            "mean_rms": round(rms_info["mean_rms"], 4),
-            "max_rms": round(rms_info["max_rms"], 4),
-            **mfcc_info["mfcc_summary"],
             "key": key_str,
             "timbre": timbre,
             "loudness": loudness,
@@ -165,49 +152,6 @@ class ExtractSongInfo:
         if max(maj_corr) >= max(min_corr):
             return librosa.midi_to_note(int(np.argmax(maj_corr)) + 60) + " major"
         return librosa.midi_to_note(int(np.argmax(min_corr)) + 60) + " minor"
-
-    def bandwidth_analysis(self, time_series: np.ndarray, sample_rate: int) -> dict:
-        """
-        Compute spectral bandwidth statistics.
-        """
-        bw = librosa.feature.spectral_bandwidth(y=time_series, sr=sample_rate)
-        bw = np.squeeze(bw)
-        return {
-            "mean_bw": float(np.mean(bw)),
-            "median_bw": float(np.median(bw)),
-            "std_bw": float(np.std(bw)),
-        }
-
-    def centroid_analysis(self, time_series: np.ndarray, sample_rate: int) -> dict:
-        """
-        Compute spectral centroid statistics.
-        """
-        cent = librosa.feature.spectral_centroid(y=time_series, sr=sample_rate)
-        cent = np.squeeze(cent)
-        return {
-            "mean_centroid": float(np.mean(cent)),
-            "median_centroid": float(np.median(cent)),
-            "std_centroid": float(np.std(cent)),
-        }
-
-    def rms_analysis(self, time_series: np.ndarray) -> dict:
-        """
-        Compute RMS energy statistics.
-        """
-        rms = librosa.feature.rms(y=time_series)
-        rms = np.squeeze(rms)
-        return {"mean_rms": float(np.mean(rms)), "max_rms": float(np.max(rms))}
-
-    def mfccs_analysis(self, time_series: np.ndarray, sample_rate: int) -> dict:
-        """
-        Extract MFCC means and standard deviations.
-        """
-        mfccs = librosa.feature.mfcc(y=time_series, sr=sample_rate, n_mfcc=13)
-        means = np.mean(mfccs, axis=1)
-        stds = np.std(mfccs, axis=1)
-        summary = {f"mfcc{i+1}_mean": round(float(means[i]), 2) for i in range(13)}
-        summary.update({f"mfcc{i+1}_std": round(float(stds[i]), 2) for i in range(13)})
-        return {"mfcc_summary": summary}
 
     def describe_timbre_and_loudness(
         self, time_series: np.ndarray, sample_rate: int
