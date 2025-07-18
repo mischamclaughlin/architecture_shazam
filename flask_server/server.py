@@ -8,6 +8,7 @@ from flask import request, jsonify, send_from_directory, abort, url_for
 from flask_cors import CORS
 from flask_login import login_user, login_required, current_user, logout_user
 from werkzeug.utils import secure_filename
+import librosa
 
 from flask_server import app
 from flask_server.models import db, User, GeneratedImage
@@ -15,7 +16,58 @@ from flask_server.modules.song_info import ExtractSongInfo
 from flask_server.modules.llm_description import GenerateLLMDescription
 from flask_server.modules.image_generation import GenerateImage
 
+from flask_server.modules import (
+    AudioFeatureExtractor,
+    GenreClassifier,
+    InstrumentClassifier,
+    ACRCloudService,
+    MusicBrainzService,
+    WikiService,
+)
+
+
 CORS(app)
+
+
+# ----------------- Helper Functions ----------------- #
+
+
+def get_features(y, sr):
+    audio_features = AudioFeatureExtractor(y, sr)
+    tempo = audio_features.tempo()
+    key = audio_features.key()
+    timbre, loudness = audio_features.describe_timbre_and_loudness()
+
+    return {"tempo": tempo, "key": key, "timbre": timbre, "loudness": loudness}
+
+
+def get_song(file_path):
+    song_recognition = ACRCloudService(file_path)
+    song = song_recognition.best_recognition()
+    if not song or song.get("score", 0) < 80:
+        return {}
+
+    title = song.get("title", "—")
+    artists = [a["name"] for a in song.get("artists", [])] or "—"
+    album = song.get("album", {}).get("name", "—")
+    release = song.get("release_date", "—")
+    genres = [(g["name"], i) for i, g in enumerate(song.get("genres", []))] or "—"
+
+    return {
+        "title": title,
+        "artists": artists,
+        "album": album,
+        "release": release,
+        "genres": genres,
+    }
+
+
+def get_origin(artist_name):
+    musicbrainz = MusicBrainzService(artist_name)
+    return musicbrainz.get_country_and_area()
+
+
+# ----------------- API's ----------------- #
 
 # In-memory store for intermediate results
 # In production swap for Redis or a real DB
@@ -98,22 +150,35 @@ def analyse():
         f.save(tmp.name)
         tmp.flush()
 
+        # load file
+        time_series, sample_rate = librosa.load(tmp.name, sr=16_000, mono=True)
+
         # extract features
-        info = ExtractSongInfo(file_path=tmp.name)
-        librosa_info = info.analyse_features()
-        genre_info = info.get_genre()
-        inst_info = info.get_instruments()
+        features = get_features(time_series, sample_rate)
+        song_info = get_song(tmp.name)
+        genres = (
+            song_info.get("genres")
+            if song_info
+            else GenreClassifier().predict(tmp.name)
+        )
+        instruments = InstrumentClassifier().predict(time_series, sample_rate)
+        artist = song_info.get("artists")[0]
+        origin = get_origin(artist) or "-"
 
         # store under an ID
         aid = tmp.name  # use the temp path as a simple key
+
         _store[aid] = {
-            "librosa": librosa_info,
-            "genre": genre_info,
-            "instrument": inst_info,
+            "features": features,
+            "song_info": song_info,
+            "genres": genres,
+            "instruments": instruments,
+            "origin": origin,
             "filename": safe,
         }
 
         return jsonify(analysisId=aid)
+
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=str(e)), 500
@@ -133,9 +198,11 @@ def describe():
             llm="deepseek-r1:14b", temperature=0.7, max_tokens=10_000
         )
         raw = llm.generate_description(
-            librosa_tags=entry["librosa"],
-            genre_tags=entry["genre"],
-            instrument_tags=entry["instrument"],
+            features=entry["features"],
+            genre_tags=entry["genres"],
+            instrument_tags=entry["instruments"],
+            song_info=entry.get("song_info") or None,
+            origin=entry["origin"],
             building_type="house",
         )
         # store prompt
@@ -173,9 +240,9 @@ def render_image():
         )
         filename = gen.save_image()
         gen.save_metadata(
-            audio_tags=_store[pid.replace("_p", "")]["librosa"],
-            genre_tags=_store[pid.replace("_p", "")]["genre"],
-            instrument_tags=_store[pid.replace("_p", "")]["instrument"],
+            audio_tags=_store[pid.replace("_p", "")]["features"],
+            genre_tags=_store[pid.replace("_p", "")]["genres"],
+            instrument_tags=_store[pid.replace("_p", "")]["instruments"],
             llm_description=prompt_entry["prompt"],
             sdxl_prompt=img_prompt,
         )
