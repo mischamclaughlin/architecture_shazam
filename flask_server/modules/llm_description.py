@@ -4,9 +4,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import argparse
 import json
 from pathlib import Path
-
 from ollama import chat, ResponseError
-
 from .logger import default_logger
 
 
@@ -37,25 +35,68 @@ class GenerateLLMDescription:
 
     def build_description_prompt(
         self,
-        librosa_tags: Dict[str, Any],
+        features: Dict[str, Any],
         genre_tags: List[Tuple[str, float]],
         instrument_tags: List[Tuple[str, float]],
+        origin: Tuple,
         building_type: str,
     ) -> str:
         """
         Construct the prompt to generate a concise architectural concept based on musical analytics.
         """
+
         genres = ", ".join(label for label, _ in genre_tags)
         instruments = ", ".join(label for label, _ in instrument_tags)
+        
         return (
             f"Act as an expert architectural designer."
             f" Using the following musical analytics, produce a concise exterior concept for a {building_type}:"
-            f" Tempo: {librosa_tags['tempo_global']} BPM,"
-            f" Key: {librosa_tags['key']},"
+            f" Tempo: {features['tempo']['global']} BPM,"
+            f" Key: {features['key']},"
             f" Genre: {genres},"
             f" Instruments: {instruments},"
-            f" Timbre: {librosa_tags['timbre']},"
-            f" Loudness: {librosa_tags['loudness']}\n\n"
+            f" Origin: {origin},"
+            f" Timbre: {features['timbre']},"
+            f" Loudness: {features['loudness']}\n\n"
+            "Instructions:\n"
+            "1. One-sentence concept statement that captures the genre-driven vision.\n"
+            "2. Three bullets explaining how you translated:\n"
+            "   - Rhythm: massing & form\n"
+            "   - Tonal colour: material palette & façade brightness\n"
+            "   - Energy & timbre: façade articulation\n"
+            "3. Overall look (3-4 sentences): a magazine-style summary emphasising how the genre shapes the design language.\n\n"
+            "Keep the total response under 500 words."
+        )
+
+    def build_description_prompt_with_song_info(
+        self,
+        features: Dict[str, Any],
+        genre_tags: List[Tuple[str, float]],
+        instrument_tags: List[Tuple[str, float]],
+        song_info: Dict[Any, Any],
+        origin: Tuple,
+        building_type: str,
+    ) -> str:
+        """
+        Construct the prompt to generate a concise architectural concept based on musical analytics.
+        """
+
+        genres = ", ".join(label for label, _ in genre_tags)
+        instruments = ", ".join(label for label, _ in instrument_tags)
+        artists = ", ".join(name for name in song_info.get("artists"))
+
+        return (
+            f"Act as an expert architectural designer."
+            f" Using the following musical analytics, produce a concise exterior concept for a {building_type}:"
+            f" Artists: {artists},"
+            f" Title: {song_info['title']},"
+            f" Origin: {origin},"
+            f" Tempo: {features['tempo']['global']} BPM,"
+            f" Key: {features['key']},"
+            f" Genre: {genres},"
+            f" Instruments: {instruments},"
+            f" Timbre: {features['timbre']},"
+            f" Loudness: {features['loudness']}\n\n"
             "Instructions:\n"
             "1. One-sentence concept statement that captures the genre-driven vision.\n"
             "2. Three bullets explaining how you translated:\n"
@@ -93,17 +134,26 @@ class GenerateLLMDescription:
 
     def generate_description(
         self,
-        librosa_tags: Dict[str, Any],
+        features: Dict[str, Any],
         genre_tags: List[Tuple[str, float]],
         instrument_tags: List[Tuple[str, float]],
+        song_info: Optional[Dict[str, Any]],
+        origin: Tuple,
         building_type: str,
     ) -> str:
         """
         Generate the architectural concept by building the prompt and querying the LLM.
         """
-        prompt = self.build_description_prompt(
-            librosa_tags, genre_tags, instrument_tags, building_type
-        )
+        if song_info:
+            prompt = self.build_description_prompt_with_song_info(
+                features, genre_tags, instrument_tags, song_info, origin, building_type
+            )
+        else:
+            prompt = self.build_description_prompt(
+                features, genre_tags, instrument_tags, origin, building_type
+            )
+
+        self.logger.info(f"LLM Prompt:\n{prompt}")
         return self.call_ollama(prompt)
 
     def summarise_for_image(self, raw_description: str) -> str:
@@ -159,69 +209,31 @@ class GenerateLLMDescription:
 
 
 # Test from command line
-def main():
-    """
-    CLI entry point for llm text generation.
-    """
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Generate architectural prompts from musical analytics"
     )
     parser.add_argument("--llm", required=True, help="Ollama model name")
-    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--max-tokens", type=int, default=256)
     parser.add_argument("--building-type", required=True)
+    parser.add_argument("--features-json", type=Path, required=True)
+    parser.add_argument("--genre-json", type=Path, required=True)
+    parser.add_argument("--instrument-json", type=Path, required=True)
+    parser.add_argument("--song-json", type=Path, help="Optional song_info JSON file")
     parser.add_argument(
-        "--librosa-tags",
-        type=Path,
-        required=True,
-        help="Path to JSON file of librosa features",
-    )
-    parser.add_argument(
-        "--genre-tags",
-        type=Path,
-        required=True,
-        help="Path to JSON file of genre tuples",
-    )
-    parser.add_argument(
-        "--instrument-tags",
-        type=Path,
-        required=True,
-        help="Path to JSON file of instrument tuples",
-    )
-    parser.add_argument(
-        "--output", type=Path, help="Where to save the generated prompts as JSON"
+        "--origin", nargs=2, metavar=("COUNTRY", "AREA"), help="Origin country and area"
     )
     args = parser.parse_args()
 
-    # Load inputs
-    librosa_tags = json.loads(args.librosa_tags.read_text())
-    genre_tags = json.loads(args.genre_tags.read_text())
-    instrument_tags = json.loads(args.instrument_tags.read_text())
+    features = json.loads(args.features_json.read_text())
+    genre_tags = json.loads(args.genre_json.read_text())
+    instrument_tags = json.loads(args.instrument_json.read_text())
+    song_info = json.loads(args.song_json.read_text()) if args.song_json else None
+    origin = tuple(args.origin) if args.origin else ("—", "")
 
-    # Instantiate and run
-    gen = GenerateLLMDescription(
-        llm=args.llm,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
-    )
+    gen = GenerateLLMDescription(args.llm, args.temperature, args.max_tokens)
     desc = gen.generate_description(
-        librosa_tags, genre_tags, instrument_tags, args.building_type
+        features, genre_tags, instrument_tags, song_info, origin, args.building_type
     )
-    img_p = gen.summarise_for_image(desc)
-    model_p = gen.summarise_for_3d(desc)
-
-    result = {
-        "description": desc,
-        "image_prompt": img_p,
-        "3d_prompt": model_p,
-    }
-
-    if args.output:
-        args.output.write_text(json.dumps(result, indent=2))
-        print(f"Prompts written to {args.output}")
-    else:
-        print(json.dumps(result, indent=2))
-
-
-if __name__ == "__main__":
-    main()
+    print(desc)
