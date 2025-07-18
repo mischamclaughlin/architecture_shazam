@@ -6,10 +6,15 @@ from flask_login import LoginManager
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash
 
+from .modules.settings import Settings
+
 
 app = Flask(__name__, static_folder="../static/dist", static_url_path="")
 app.jinja_env.undefined = StrictUndefined
 app.config.from_object(Config)
+
+settings = Settings()
+app.config["APP_SETTINGS"] = settings
 
 CORS(app, supports_credentials=True)
 
