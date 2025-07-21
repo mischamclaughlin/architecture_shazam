@@ -28,4 +28,4 @@ def get_country_and_area(artist_name):
 
 
 print(get_country_and_area("Teresa Teng"))
-print(get_country_and_area("Ludwig van Beethoven"))
+print(get_country_and_area("Carmen Twillie"))

@@ -53,7 +53,7 @@ def best_recognition(
 
 
 if __name__ == "__main__":
-    mp3_path = "./tunes/Tian_Mi_Mi-Teresa_Teng.mp3"
+    mp3_path = "./tunes/the_lion_king.mp3"
     # try offsets around the vocal hook / chorus
     offsets = [45, 60, 75, 90]  # in seconds
     clip_length = 10  # seconds to fingerprint
@@ -61,6 +61,7 @@ if __name__ == "__main__":
     track = best_recognition(mp3_path, offsets, clip_length)
 
     if track:
+        print(track)
         title = track.get("title", "—")
         artists = ", ".join(a["name"] for a in track.get("artists", [])) or "—"
         album = track.get("album", {}).get("name", "—")
