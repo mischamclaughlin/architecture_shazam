@@ -1,0 +1,5 @@
+# track directory but not files
+
+*
+!.gitignore
+
