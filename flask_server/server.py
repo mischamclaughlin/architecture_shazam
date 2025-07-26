@@ -1,4 +1,4 @@
-# flask_server/server.py
+# ./flask_server/server.py
 import os
 import traceback
 from pathlib import Path
@@ -15,19 +15,24 @@ from flask_server.models import db, User, GeneratedImage
 from flask_server.modules.llm_description import GenerateLLMDescription
 from flask_server.modules.image_generation import GenerateImage
 
+from flask_server.modules.services.spotify_service import SpotifyService
+from flask_server.modules.services.itunes_service import ITunesService
+
 from flask_server.modules import (
     get_features,
     get_song,
     get_origin,
     get_genres,
     get_instruments,
+    get_spotify_search,
+    get_itunes_search,
 )
 
 
 CORS(app)
 
 
-# --------------------------- API's --------------------------- #
+# --------------------------------- API's --------------------------------- #
 
 # In-memory store for intermediate results
 # In production swap for Redis or a real DB
@@ -96,6 +101,25 @@ def logout():
     return jsonify(status="ok"), 200
 
 
+@app.route("/api/track_snippet", methods=["POST"])
+@login_required
+def track_snippet():
+    data = request.get_json() or {}
+    song_name = data.get("songName", "").strip()
+    if not song_name:
+        return jsonify(error="Must provide a song name"), 400
+
+    info_spotify = get_spotify_search(song_name)
+    if not info_spotify.get("error") and info_spotify.get("preview_url"):
+        return jsonify(info_spotify), 200
+
+    info_itunes = get_itunes_search(song_name)
+    if info_itunes:
+        return jsonify(info_itunes), 200
+
+    return jsonify(error="No snippet found on Spotify or iTunes"), 404
+
+
 @app.route("/api/analyse", methods=["POST"])
 @login_required
 def analyse():
@@ -104,37 +128,53 @@ def analyse():
         if not f:
             return jsonify(error="No file"), 400
 
-        # save to temp
-        safe = secure_filename(f.filename)
+        title = request.form.get("title", "").strip()
+        ext = Path(f.filename).suffix or ".mp3"
+        if title:
+            safe = secure_filename(title) + ext
+        else:
+            safe = secure_filename(f.filename)
+
         tmp = NamedTemporaryFile(suffix=Path(safe).suffix, delete=False)
         f.save(tmp.name)
         tmp.flush()
 
-        # load file
-        time_series, sample_rate = librosa.load(tmp.name, sr=16_000, mono=True)
+        y, sr = librosa.load(tmp.name, sr=16_000, mono=True)
+        features = get_features(y, sr)
 
-        # extract features
-        features = get_features(time_series, sample_rate)
-        song_info = get_song(tmp.name)
-        genres = get_genres(song_info, tmp.name)
-        instruments = get_instruments(time_series, sample_rate)
-        artist = song_info.get("artists")[0]
-        origin = get_origin(artist) or "-"
+        # if client-supplied metadata
+        artist = request.form.get("artist", "").strip()
 
-        # store under an ID
-        aid = tmp.name  # use the temp path as a simple key
+        if title and artist:
+            song_info = {
+                "title": title,
+                "artists": [artist],
+                "album": request.form.get("album", "—"),
+                "release": request.form.get("release", "—"),
+                "genres": [],
+            }
+        else:
+            song_info = get_song(tmp.name)
 
+        genres = get_genres(tmp.name, song_info)
+        instruments = get_instruments(y, sr)
+        origin = (
+            get_origin(song_info["artists"][0])
+            if song_info.get("artists")
+            else ("—", "—")
+        )
+
+        aid = tmp.name
         _store[aid] = {
             "features": features,
             "song_info": song_info,
             "genres": genres,
             "instruments": instruments,
             "origin": origin,
-            "filename": safe,
+            "filename": song_info["title"],
         }
 
         return jsonify(analysisId=aid)
-
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=str(e)), 500
