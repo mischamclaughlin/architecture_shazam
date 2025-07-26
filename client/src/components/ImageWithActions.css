@@ -85,7 +85,7 @@
     cursor: pointer;
 }
 
-.iwa-button > svg {
+.iwa-button>svg {
     vertical-align: middle;
     transform: translateY(-2px);
 }
@@ -98,6 +98,7 @@
 .iwa-actions a {
     text-decoration: none;
     color: inherit;
+    color: black;
 }
 
 .iwa-modal {

@@ -8,7 +8,7 @@ import './ImageWithActions.css';
 
 export default function ImageWithActions({ src, alt = '' }) {
     const [zoomed, setZoomed] = useState(false)
-    const title = alt.split(/mp3|wav/)[0].replaceAll('_', ' ')
+    const title = alt.split(/mp3|wav|png|m4a/)[0].replaceAll('_', ' ').replaceAll('.', '')
 
     return (
         <div className='image-area'>
