@@ -1,4 +1,5 @@
 # ./flask_server/modules/analysis/classifiers.py
+from typing import List, Tuple
 import torch
 import numpy as np
 from transformers import pipeline, AutoFeatureExtractor, AutoModelForAudioClassification
@@ -21,11 +22,25 @@ class GenreClassifier:
         )
         self.threshold = threshold
 
-    def predict(self, file_path: str) -> list[tuple[str, float]]:
-        scores = self.clf(file_path)[0]
+    def predict(self, file_path: str) -> List[Tuple[str, float]]:
+        raw = self.clf(file_path)
+
+        if isinstance(raw, dict):
+            label = raw.get("label")
+            score = raw.get("score", 0.0)
+            return [(label, score)] if score >= self.threshold else []
+
+        if not isinstance(raw, list):
+            return []
+
+        scores = raw[0] if raw and isinstance(raw[0], list) else raw
 
         return sorted(
-            [(r["label"], r["score"]) for r in scores if r["score"] >= self.threshold],
+            [
+                (r["label"], r["score"])
+                for r in scores
+                if isinstance(r, dict) and r.get("score", 0) >= self.threshold
+            ],
             key=lambda x: x[1],
             reverse=True,
         )

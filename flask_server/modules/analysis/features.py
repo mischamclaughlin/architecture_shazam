@@ -30,9 +30,9 @@ class AudioFeatureExtractor:
         tempo_global, _ = librosa.beat.beat_track(y=self.y, sr=self.sr)
         local = librosa.feature.tempogram(y=self.y, sr=self.sr)
         return {
-            "global": float(tempo_global),
-            "mean_local": float(np.mean(local)),
-            "median_local": float(np.median(local)),
+            "global": round(float(tempo_global), 2),
+            "mean_local": round(float(np.mean(local)), 2),
+            "median_local": round(float(np.median(local)), 2),
         }
 
     def key(self) -> str:
