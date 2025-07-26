@@ -1,4 +1,8 @@
 /* ./client/src/components/DragDropUpload.css */
+.upload-area {
+    padding-bottom: 0.5rem;
+}
+
 .dropzone {
     border: 2px dashed #ccc;
     background-color: rgba(255, 255, 255, 0.50);

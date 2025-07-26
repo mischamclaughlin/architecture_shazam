@@ -1,22 +1,35 @@
 // src/components/DragDropUpload.jsx
-import React, { useRef, useState } from 'react';
+import React, {
+    forwardRef,
+    useRef,
+    useState,
+    useImperativeHandle
+} from 'react';
 import './DragDropUpload.css';
 
-export default function DragDropUpload({
+const DragDropUpload = forwardRef(function DragDropUpload({
     onFileSelect,
     accept = '.mp3,.wav'
-}) {
+}, ref) {
     const inputRef = useRef();
     const [fileName, setFileName] = useState('');
     const [dragActive, setDragActive] = useState(false);
     const [error, setError] = useState('');
 
+    // expose clear() to parent
+    useImperativeHandle(ref, () => ({
+        clear: () => {
+            if (inputRef.current) inputRef.current.value = '';
+            setFileName('');
+            setError('');
+            onFileSelect(null);
+        }
+    }));
+
     const isValidAudio = file => {
         const allowedTypes = ['audio/mpeg', 'audio/wav'];
-        const allowedExts = ['.mp3', '.wav'];
-        const { type, name } = file;
-        const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-        return allowedTypes.includes(type) && allowedExts.includes(ext);
+        const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+        return allowedTypes.includes(file.type) && ['.mp3', '.wav'].includes(ext);
     };
 
     const handleFile = file => {
@@ -30,24 +43,21 @@ export default function DragDropUpload({
     };
 
     const handleClick = () => inputRef.current.click();
-    const handleChange = e => {
-        const file = e.target.files[0];
-        if (file) handleFile(file);
-    };
-
+    const handleChange = e => e.target.files[0] && handleFile(e.target.files[0]);
     const handleDrag = e => {
-        e.preventDefault(); e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
         setDragActive(e.type === 'dragenter' || e.type === 'dragover');
     };
     const handleDrop = e => {
-        e.preventDefault(); e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
         setDragActive(false);
-        const file = e.dataTransfer.files[0];
-        if (file) handleFile(file);
+        e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]);
     };
 
     return (
-        <div>
+        <div className="upload-area">
             <div
                 className={dragActive ? 'dropzone active' : 'dropzone'}
                 onClick={handleClick}
@@ -71,4 +81,6 @@ export default function DragDropUpload({
             {error && <p className="error">{error}</p>}
         </div>
     );
-}
+});
+
+export default DragDropUpload;
