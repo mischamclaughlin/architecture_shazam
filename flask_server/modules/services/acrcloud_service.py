@@ -44,11 +44,11 @@ class ACRCloudService:
 
             # find the top‐scoring track in this slice
             candidate = max(data["metadata"]["music"], key=lambda t: t["score"])
-            if candidate["score"] > best_score:
+            if candidate.get("score", -1) > best_score:
                 best_score = candidate["score"]
                 best_track: dict = candidate
 
-        if best_track["score"] > 80:
+        if best_track and best_track.get("score", 0) > 80:
             return best_track
 
         return {}
