@@ -1,53 +1,71 @@
-# ./flask_server/modules/helpers.py
+# flask_server/modules/helpers.py
+from typing import Optional, Tuple, List, Dict, Any
 from flask_server.modules import (
-    AudioFeatureExtractor,
+    ITunesService,
+    SpotifyService,
     GenreClassifier,
     InstrumentClassifier,
+    AudioFeatureExtractor,
     ACRCloudService,
     MusicBrainzService,
 )
 
 
-def get_features(y, sr):
-    audio_features = AudioFeatureExtractor(y, sr)
-    tempo = audio_features.tempo()
-    key = audio_features.key()
-    timbre, loudness = audio_features.describe_timbre_and_loudness()
-
-    return {"tempo": tempo, "key": key, "timbre": timbre, "loudness": loudness}
+def get_spotify_search(song_name: str) -> Dict[str, Any]:
+    """Return SpotifyService.song_info() dict (may include 'error')."""
+    return SpotifyService(song_name).lookup()
 
 
-def get_song(file_path):
-    song_recognition = ACRCloudService(file_path)
-    song = song_recognition.best_recognition()
-    if not song or song.get("score", 0) < 80:
-        return {}
+def get_itunes_search(song_name: str) -> Optional[Dict[str, Any]]:
+    """Return ITunesService.lookup() dict or None."""
+    return ITunesService(song_name).lookup()
 
-    title = song.get("title", "—")
-    artists = [a["name"] for a in song.get("artists", [])] or "—"
-    album = song.get("album", {}).get("name", "—")
-    release = song.get("release_date", "—")
-    genres = [(g["name"], i) for i, g in enumerate(song.get("genres", []))] or "—"
 
+def get_features(y, sr) -> Dict[str, Any]:
+    """Extract key features from song."""
+    f = AudioFeatureExtractor(y, sr)
     return {
-        "title": title,
-        "artists": artists,
-        "album": album,
-        "release": release,
-        "genres": genres,
+        "tempo": f.tempo(),
+        "key": f.key(),
+        "timbre": f.describe_timbre_and_loudness()[0],
+        "loudness": f.describe_timbre_and_loudness()[1],
     }
 
 
-def get_origin(artist_name):
-    musicbrainz = MusicBrainzService(artist_name)
-    return musicbrainz.get_country_and_area()
+def get_song(file_path: str) -> Dict[str, Any]:
+    """ACRCloud-based metadata extractor."""
+    song = ACRCloudService(file_path).best_recognition() or {}
+    if not song or song.get("score", 0) < 80:
+        return {}
+    return {
+        "title": song.get("title", "—"),
+        "artists": [a["name"] for a in song.get("artists", [])] or [],
+        "album": song.get("album", {}).get("name", "—"),
+        "release": song.get("release_date", "—"),
+        "genres": [(g["name"], i) for i, g in enumerate(song.get("genres", []))],
+    }
 
 
-def get_genres(info, file_name):
-    genres = info.get("genres") if info else GenreClassifier().predict(file_name)
-    return genres
+def get_origin(artist: str) -> Tuple[Optional[str], Optional[str]]:
+    return MusicBrainzService(artist).get_country_and_area()
 
 
-def get_instruments(y, sr):
-    instruments = InstrumentClassifier().predict(y, sr)
-    return instruments
+def get_genres(
+    file_path: str, metadata: Optional[Dict[str, Any]] = None
+) -> List[Tuple[str, float]]:
+    """If metadata has genres, use that; else fall back to classifier."""
+    if metadata and metadata.get("genres"):
+        return metadata["genres"]
+
+    try:
+        out = GenreClassifier().predict(file_path)
+        if isinstance(out, list) and all(isinstance(x, tuple) for x in out):
+            return out
+    except Exception as e:
+        print("GenreClassifier failed:", e)
+
+    return []
+
+
+def get_instruments(y, sr) -> List[Tuple[str, float]]:
+    return InstrumentClassifier().predict(y, sr)
