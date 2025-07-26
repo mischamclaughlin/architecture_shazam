@@ -1,14 +1,51 @@
 /* ./client/src/pages/HomePage.css */
+.home-page {
+    background-color: rgba(197, 197, 197, 0.25);
+    text-align: center;
+}
+
+.file-interaction-area {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem;
+    gap: 1rem;
+}
+
+.how-to-use {
+    background-color: rgba(215, 215, 215, 0.5);
+    width: 75%;
+    padding: 0.1rem 1rem;
+    font-size: small;
+    border-radius: 0.25rem;
+}
+
 .file-upload-area {
+    width: 100%;
     padding: 1rem;
-    margin: 1rem;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 1rem;
-    background-color: rgba(170, 170, 170, 0.20);
+    background-color: rgba(215, 215, 215, 0.2);
     box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
     border-radius: 0.5rem;
+}
+
+.song-search-area {
+    width: 100%;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    background-color: rgba(215, 215, 215, 0.2);
+    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
+    border-radius: 0.5rem;
+
 }
 
 .file-upload-area h2 {
@@ -18,12 +55,14 @@
 
 .generate-button {
     all: unset;
+    text-align: center;
     padding: 0.5rem 1rem;
     border-radius: 0.25rem;
     background-color: black;
     color: white;
     border: 1px solid black;
     cursor: pointer;
+    width: 25%;
 }
 
 .generate-button:hover {
@@ -34,6 +73,14 @@
 }
 
 .gallery-area {
-    margin: 2rem 1rem;
     text-align: center;
+    padding: 0.5rem;
+    margin: 2rem 0.5rem;
+    background-color: rgba(215, 215, 215, 0.2);
+    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
+    border-radius: 0.5rem;
+}
+
+.gallery-area h3 {
+    margin: 1rem;
 }
