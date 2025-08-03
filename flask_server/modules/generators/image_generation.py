@@ -60,7 +60,7 @@ class GenerateImage:
         self.num_inference_steps = num_inference_steps
         self.model_name = model_name
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.device = self.pick_device()
+        self.device = self._pick_device()
         self.logger = logger or default_logger(__name__)
 
         # Safe directory naming
@@ -69,7 +69,7 @@ class GenerateImage:
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self._pipe: Optional[StableDiffusionXLPipeline] = None
 
-    def pick_device(self) -> torch.device:
+    def _pick_device(self) -> torch.device:
         """
         Select the best available device: CUDA > MPS > CPU.
         """
