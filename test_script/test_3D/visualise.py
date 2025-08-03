@@ -1,5 +1,5 @@
-# ./visualise.py
+# ./test_script/test_3D/visualise.py
 import trimesh
 
-mesh = trimesh.load("generated_3D_models/house_mesh_0_20250803_152258.obj")
+mesh = trimesh.load("generated_3D_models/mesh_0_20250803_180942.obj")
 mesh.show()

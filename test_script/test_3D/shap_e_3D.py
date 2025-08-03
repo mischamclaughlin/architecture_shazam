@@ -4,8 +4,6 @@ import os
 
 import torch
 import numpy as np
-import trimesh
-from trimesh.remesh import subdivide
 
 from shap_e.diffusion.sample import sample_latents
 from shap_e.diffusion.gaussian_diffusion import diffusion_from_config
