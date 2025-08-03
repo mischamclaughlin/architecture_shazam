@@ -1,8 +1,4 @@
 # ./flask_server/modules/__init__.py
-from .song_info import ExtractSongInfo
-from .image_generation import GenerateImage
-from .llm_description import GenerateLLMDescription
-
 
 # API services
 from .services.acrcloud_service import ACRCloudService
@@ -15,6 +11,9 @@ from .services.itunes_service import ITunesService
 from .analysis.features import AudioFeatureExtractor
 from .analysis.classifiers import GenreClassifier, InstrumentClassifier
 
+# Generators classes
+from .generators.llm_description import GenerateLLMDescription
+from .generators.image_generation import GenerateImage
 
 # Helper Functions
 from .helpers import (
