@@ -12,11 +12,8 @@ import librosa
 
 from flask_server import app
 from flask_server.models import db, User, GeneratedImage
-from flask_server.modules.llm_description import GenerateLLMDescription
-from flask_server.modules.image_generation import GenerateImage
-
-from flask_server.modules.services.spotify_service import SpotifyService
-from flask_server.modules.services.itunes_service import ITunesService
+from flask_server.modules import GenerateLLMDescription
+from flask_server.modules import GenerateImage
 
 from flask_server.modules import (
     get_features,
@@ -270,7 +267,7 @@ def list_images():
     imgs = GeneratedImage.query.filter_by(user_id=current_user.id).all()
     load_imgs = []
     for img in imgs:
-        url = url_for("serve_generated_image", filename=img.filename)
+        url = url_for("serve_generated_image", filename=img.filename, _external=True)
         load_imgs.append({"id": img.id, "filename": img.filename, "url": url})
     load_imgs.reverse()
 
