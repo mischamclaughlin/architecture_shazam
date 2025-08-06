@@ -10,13 +10,23 @@ export default function Navbar({ currentUser, onLogout }) {
             <Link to="/">
                 <h1 className="nav-title">Architecture Shazam</h1>
             </Link>
+
             {currentUser ? (
                 <div className="nav-area">
                     <p className="welcome-user">Welcome, {currentUser.username}</p>
-                    <Link to="/">Home</Link>
-                    <button onClick={onLogout} className="logout-button">
-                        Logout
-                    </button>
+
+                    <div className="dropdown">
+                        <button className="dropbtn">Menu ↴</button>
+                        <ul className="dropdown-content">
+                            <li><Link to="/">Home</Link></li>
+                            <li><Link to="/gallery">Gallery</Link></li>
+                            <li>
+                                <button onClick={onLogout} className="logout-button">
+                                    Logout
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             ) : (
                 <div className="nav-area">
@@ -25,6 +35,6 @@ export default function Navbar({ currentUser, onLogout }) {
                     <Link to="/register">Register</Link>
                 </div>
             )}
-        </nav >
+        </nav>
     );
 }

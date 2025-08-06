@@ -6,6 +6,7 @@
     padding: 1rem;
     background-color: rgba(0, 0, 0, 0.9);
     color: white;
+    margin-bottom: 2rem;
 }
 
 .navbar-menu a {
@@ -20,10 +21,23 @@
     padding-right: 2rem;
 }
 
-.logout-button {
+.dropdown-content li button.logout-button {
     all: unset;
+    display: block;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    color: black;
+    text-decoration: none;
+    text-align: left;
     cursor: pointer;
-    font-weight: bolder;
+    font-weight: bold;
+}
+
+.dropdown-content li button.logout-button:hover {
+    background-color: rgba(0, 0, 0, 0.75);
+    color: white;
+    box-sizing: border-box;
+    border-radius: 0.5rem;
 }
 
 .nav-area {
@@ -41,4 +55,62 @@
 .welcome-user {
     font-weight: bolder;
     color: rgba(255, 0, 0, 0.85);
+}
+
+.nav-area {
+    display: flex;
+    justify-content: end;
+    align-items: center;
+    gap: 2rem;
+    position: relative;
+}
+
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropbtn {
+    all: unset;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.70);
+    font-weight: bold;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 1rem;
+    background-color: rgba(215, 215, 215, 0.95);
+    min-width: 160px;
+    border-radius: 4px;
+    padding: 0.5rem 0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    list-style: none;
+    margin: 0;
+    z-index: 10;
+}
+
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
+.dropdown-content li {
+    padding: 0.05rem;
+}
+
+.dropdown-content li a {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: black;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dropdown-content li a:hover {
+    background-color: rgba(0, 0, 0, 0.75);
+    color: white;
+    border-radius: 0.5rem;
 }
