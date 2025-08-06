@@ -1,0 +1,21 @@
+/* ./client/src/component/LatestImage.css */
+.latest-image-area {
+    padding: 0.5rem;
+}
+
+.title {
+    text-align: center;
+    background-color: rgba(215, 215, 215, 0.5);
+    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+}
+
+.image {
+    display: flex;
+    justify-content: center;
+    background-color: rgba(215, 215, 215, 0.5);
+    margin: 0.25rem 1.5rem;
+    border-radius: 0 0 0.5rem 0.5rem;
+    padding: 2rem 0;
+}
