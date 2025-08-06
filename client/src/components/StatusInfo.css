@@ -14,5 +14,6 @@
 .status-success.show {
     padding: 0.5rem 10rem;
     opacity: 1;
+    width: 100%;
     transform: translateY(0);
 }
