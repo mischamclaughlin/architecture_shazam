@@ -1,7 +1,25 @@
 /* ./client/src/pages/HomePage.css */
 .home-page {
-    background-color: rgba(197, 197, 197, 0.25);
     text-align: center;
+}
+
+.image-generation {
+    text-align: start;
+    padding: 0.25rem;
+    margin: 0 0.5rem;
+    background-color: rgba(215, 215, 215, 0.2);
+    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
+    border-radius: 0.5rem;
+}
+
+.image-generation>summary {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-bottom: 2px solid black;
+}
+
+.generation-area[open]>summary::marker {
+    transform: rotate(90deg);
 }
 
 .file-interaction-area {
@@ -70,17 +88,4 @@
     border: 1px solid black;
     color: black;
     box-shadow: 0 0 8px 0 rgba(0, 0, 0, 0.5);
-}
-
-.gallery-area {
-    text-align: center;
-    padding: 0.5rem;
-    margin: 2rem 0.5rem;
-    background-color: rgba(215, 215, 215, 0.2);
-    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
-    border-radius: 0.5rem;
-}
-
-.gallery-area h3 {
-    margin: 1rem;
 }

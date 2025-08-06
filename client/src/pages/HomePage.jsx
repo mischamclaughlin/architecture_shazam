@@ -1,20 +1,22 @@
+// ./client/src/pages/HomePage.jsx
 import React, { useState } from 'react';
 import DragDropUpload from '../components/DragDropUpload';
 import SpotifySearch from '../components/SongSearch';
 import StatusMessage from '../components/StatusInfo';
 import ErrorStatusMessage from '../components/ErrorStatus';
-import ImageGallery from '../components/ImageGallery';
+import LoadImage from '../components/LatestImage';
+
 import { useGenerateImage } from '../hooks/useGenerateImage';
-import { loadMyImages } from '../hooks/loadMyImages';
+
 import './HomePage.css';
 
 export default function HomePage() {
     const [file, setFile] = useState(null);
     const [snippetInfo, setSnippetInfo] = useState(null);
     const [query, setQuery] = useState('');
+    const [refreshKey, setRefreshKey] = useState(0);
 
     const { status, errorStatus, generate, generateFromUrl } = useGenerateImage();
-    const { images, loading, reload } = loadMyImages();
 
     const handleTrackLookup = ({ title, artist, preview_url }) => {
         setQuery(title);
@@ -32,7 +34,7 @@ export default function HomePage() {
         setFile(null);
         setSnippetInfo(null);
         setQuery('');
-        reload();
+        setRefreshKey(k => k + 1);
     };
 
     const uploadKey = file
@@ -43,47 +45,45 @@ export default function HomePage() {
 
     return (
         <div className="home-page">
-            <div className="file-interaction-area">
-                <div className="song-search-area">
-                    <h2>Song Search</h2>
-                    <SpotifySearch
-                        value={query}
-                        onChange={setQuery}
-                        onResult={handleTrackLookup}
-                    />
-                </div>
+            <details className='image-generation' open>
+                <summary>Image Generation</summary>
+                <div className="file-interaction-area">
+                    <div className="song-search-area">
+                        <h2>Song Search</h2>
+                        <SpotifySearch
+                            value={query}
+                            onChange={setQuery}
+                            onResult={handleTrackLookup}
+                        />
+                    </div>
 
-                <div className="file-upload-area">
-                    <h2>Upload File</h2>
-                    <DragDropUpload
-                        key={uploadKey}
-                        onFileSelect={setFile}
-                    />
-                </div>
+                    <div className="file-upload-area">
+                        <h2>Upload File</h2>
+                        <DragDropUpload
+                            onFileSelect={setFile}
+                        />
+                    </div>
 
-                <button
-                    onClick={handleGenerateClick}
-                    disabled={
-                        (!file && !(snippetInfo?.preview_url)) ||
-                        status.includes('…')
+                    <button
+                        onClick={handleGenerateClick}
+                        disabled={
+                            (!file && !(snippetInfo?.preview_url)) ||
+                            status.includes('…')
+                        }
+                        className="generate-button"
+                    >
+                        {status && status !== 'Done!' ? 'Generating…' : 'Generate Image'}
+                    </button>
+
+                    {errorStatus
+                        ? <ErrorStatusMessage status={errorStatus} />
+                        : <StatusMessage status={status} />
                     }
-                    className="generate-button"
-                >
-                    {status && status !== 'Done!' ? 'Generating…' : 'Generate Image'}
-                </button>
-
-                {errorStatus
-                    ? <ErrorStatusMessage status={errorStatus} />
-                    : <StatusMessage status={status} />
-                }
-            </div>
-
-            {!loading && images.length > 0 && (
-                <div className="gallery-area">
-                    <h3>Your Image Gallery</h3>
-                    <ImageGallery images={images} />
                 </div>
-            )}
+                <div>
+                    <LoadImage key={refreshKey} />
+                </div>
+            </details>
         </div>
     );
 }
