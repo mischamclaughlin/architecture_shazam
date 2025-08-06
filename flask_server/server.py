@@ -267,11 +267,40 @@ def list_images():
     imgs = GeneratedImage.query.filter_by(user_id=current_user.id).all()
     load_imgs = []
     for img in imgs:
-        url = url_for("serve_generated_image", filename=img.filename, _external=True)
+        url = url_for("serve_generated_image", filename=img.filename, _external=False)
         load_imgs.append({"id": img.id, "filename": img.filename, "url": url})
     load_imgs.reverse()
 
     return jsonify(images=load_imgs), 200
+
+
+@app.route("/api/image", methods=["GET"])
+@login_required
+def view_image():
+    last_img = (
+        GeneratedImage.query.filter_by(user_id=current_user.id)
+        .order_by(GeneratedImage.id.desc())
+        .first()
+    )
+
+    if not last_img:
+        return jsonify(error="No images found"), 404
+
+    url = url_for("serve_generated_image", filename=last_img.filename, _external=False)
+    return jsonify({"id": last_img.id, "filename": last_img.filename, "url": url}), 200
+
+
+@app.route("/api/images/<int:image_id>", methods=["DELETE"])
+@login_required
+def delete_image(image_id):
+    img = GeneratedImage.query.filter_by(user_id=current_user.id, id=image_id).first()
+
+    if not img:
+        return jsonify(error="Image not found"), 404
+
+    db.session.delete(img)
+    db.session.commit()
+    return jsonify(status="ok"), 200
 
 
 @app.route("/", defaults={"path": ""})
