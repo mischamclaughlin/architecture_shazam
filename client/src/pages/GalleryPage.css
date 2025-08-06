@@ -1,0 +1,29 @@
+/* ./client/src/pages/GalleryPage.css */
+.gallery-area {
+    padding: 0.25rem;
+    margin: 0 0.5rem;
+    background-color: rgba(215, 215, 215, 0.2);
+    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
+    border-radius: 0.5rem;
+}
+
+.gallery-area h3 {
+    margin: 1rem;
+    padding: 0.15rem 0;
+    border-bottom: 2px solid black;
+}
+
+.gallery-area>summary {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-bottom: 2px solid black;
+}
+
+.gallery-area[open]>summary::marker {
+    transform: rotate(90deg);
+}
+
+.gallery-area>img,
+.gallery-area>div {
+    padding: 1rem;
+}
