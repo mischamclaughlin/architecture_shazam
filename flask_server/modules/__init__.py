@@ -12,8 +12,9 @@ from .analysis.features import AudioFeatureExtractor
 from .analysis.classifiers import GenreClassifier, InstrumentClassifier
 
 # Generators classes
-from .generators.llm_description import GenerateLLMDescription
+from .generators.description_generation import GenerateLLMDescription
 from .generators.image_generation import GenerateImage
+from .generators.model_generation import Generate3d
 
 # Helper Functions
 from .helpers import (
