@@ -4,7 +4,7 @@ import { useLatestImage } from '../hooks/useLatestImage';
 import ImageWithActions from './ImageWithActions';
 import './LatestImage.css';
 
-export default function LoadImage({ refreshKey }) {
+export default function LatestImage({ refreshKey }) {
     const { image: img, loading, reload } = useLatestImage();
 
     useEffect(() => {
