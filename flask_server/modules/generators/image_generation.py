@@ -149,66 +149,7 @@ class GenerateImage:
             num_inference_steps=self.num_inference_steps,
             device=str(self.device),
         )
-        json_path = self.save_dir / f"metadata_{self.timestamp}.json"
+        json_path = self.save_dir / f"metadata_{self.song_name}_{self.timestamp}.json"
         json_path.write_text(json.dumps(asdict(meta), indent=2), encoding="utf-8")
         self.logger.info(f"Metadata saved to {json_path}")
         return json_path
-
-
-# Test from command line
-def main():
-    """
-    CLI entry point for generating an image and metadata.
-    """
-    parser = argparse.ArgumentParser(
-        description="Generate SDXL images for a song and save metadata."
-    )
-    parser.add_argument(
-        "--llm", required=True, help="Name of the LLM used for descriptions."
-    )
-    parser.add_argument("--song-name", required=True, help="Identifier for the song.")
-    parser.add_argument("--prompt", required=True, help="Image prompt for SDXL.")
-    parser.add_argument(
-        "--steps", type=int, default=50, help="Number of inference steps."
-    )
-    parser.add_argument(
-        "--model-name",
-        default="stabilityai/stable-diffusion-xl-base-1.0",
-        help="SDXL model checkpoint to use.",
-    )
-    parser.add_argument(
-        "--metadata-json",
-        type=Path,
-        help="Path to JSON file with audio_tags, llm_description, and sdxl_prompt.",
-    )
-    args = parser.parse_args()
-
-    # Load metadata inputs if provided
-    audio_tags: Dict[str, Any] = {}
-    genre_tags: List[Tuple[str, float]] = []
-    instrument_tags: List[Tuple[str, float]] = []
-    llm_description: str = ""
-    sdxl_prompt: str = args.prompt
-    if args.metadata_json:
-        data = json.loads(args.metadata_json.read_text(encoding="utf-8"))
-        audio_tags = data.get("audio_tags", {})
-        genre_tags = data.get("genre_tags", {})
-        instrument_tags = data.get("instrument_tags", {})
-        llm_description = data.get("llm_description", "")
-
-    generator = GenerateImage(
-        llm=args.llm,
-        song_name=args.song_name,
-        img_prompt=args.prompt,
-        num_inference_steps=args.steps,
-        model_name=args.model_name,
-    )
-    image_path = generator.save_image()
-    metadata_path = generator.save_metadata(
-        audio_tags, genre_tags, instrument_tags, llm_description, sdxl_prompt
-    )
-    print(f"Done. Image: {image_path}, Metadata: {metadata_path}")
-
-
-if __name__ == "__main__":
-    main()
