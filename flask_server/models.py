@@ -25,6 +25,9 @@ class User(UserMixin, db.Model):
     images: so.Mapped[List["GeneratedImage"]] = so.relationship(
         "GeneratedImage", back_populates="user", cascade="all, delete-orphan"
     )
+    models: so.Mapped[List["GeneratedModel"]] = so.relationship(
+        "GeneratedModel", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return (
@@ -58,5 +61,28 @@ class GeneratedImage(db.Model):
     def __repr__(self):
         return (
             f"GeneratedImage(id={self.id}, user_id={self.user_id},"
+            f" filename={self.filename})"
+        )
+
+
+class GeneratedModel(db.Model):
+    __tablename__ = "generated_models"
+
+    id: so.Mapped[int] = so.mapped_column(sa.Integer, primary_key=True)
+    user_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey("users.id"), nullable=False
+    )
+    filename: so.Mapped[str] = so.mapped_column(sa.String(256), nullable=False)
+    mime_type: so.Mapped[str] = so.mapped_column(sa.String(100), nullable=False)
+    data: so.Mapped[bytes] = so.mapped_column(sa.LargeBinary, nullable=False)
+    created_at: so.Mapped[datetime] = so.mapped_column(
+        sa.DateTime, server_default=func.now()
+    )
+
+    user: so.Mapped[User] = so.relationship("User", back_populates="models")
+
+    def __repr__(self):
+        return (
+            f"GeneratedModel(id={self.id}, user_id={self.user_id},"
             f" filename={self.filename})"
         )

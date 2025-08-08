@@ -11,11 +11,12 @@ from werkzeug.utils import secure_filename
 import librosa
 
 from flask_server import app
-from flask_server.models import db, User, GeneratedImage
-from flask_server.modules import GenerateLLMDescription
-from flask_server.modules import GenerateImage
+from flask_server.models import db, User, GeneratedImage, GeneratedModel
 
 from flask_server.modules import (
+    GenerateLLMDescription,
+    GenerateImage,
+    Generate3d,
     get_features,
     get_song,
     get_origin,
@@ -29,8 +30,6 @@ from flask_server.modules import (
 CORS(app)
 
 
-# --------------------------------- API's --------------------------------- #
-
 # In-memory store for intermediate results
 # In production swap for Redis or a real DB
 _store = {}
@@ -41,6 +40,16 @@ def serve_generated_image(filename):
     folder = Path(__file__).parent / "static" / "images"
     full_path = folder / filename
     if not os.path.isfile(full_path):
+        return abort(404)
+    return send_from_directory(str(folder), filename)
+
+
+@app.route("/static/models/<path:filename>")
+@login_required
+def serve_generated_model(filename):
+    folder = Path(__file__).parent / "static" / "models"
+    full_path = folder / filename
+    if not full_path.is_file():
         return abort(404)
     return send_from_directory(str(folder), filename)
 
@@ -139,7 +148,6 @@ def analyse():
         y, sr = librosa.load(tmp.name, sr=16_000, mono=True)
         features = get_features(y, sr)
 
-        # if client-supplied metadata
         artist = request.form.get("artist", "").strip()
 
         if title and artist:
@@ -198,7 +206,6 @@ def describe():
             origin=entry["origin"],
             building_type="house",
         )
-        # store prompt
         pid = aid + "_p"
         _store[pid] = {"prompt": raw, "filename": entry["filename"]}
 
@@ -210,52 +217,97 @@ def describe():
 
 @app.route("/api/render", methods=["POST"])
 @login_required
-def render_image():
+def render_image_or_model():
     try:
         data = request.get_json() or {}
         pid = data.get("promptId")
+        action = data.get("action", "image")
+
         prompt_entry = _store.get(pid)
         if not prompt_entry:
             return jsonify(error="Invalid promptId"), 400
 
-        # build image prompt
         llm_sum = GenerateLLMDescription(
             llm="deepseek-r1:14b", temperature=0, max_tokens=75
         )
-        img_prompt = llm_sum.summarise_for_image(raw_description=prompt_entry["prompt"])
 
-        # generate & save
-        gen = GenerateImage(
-            llm="deepseek-r1:14b",
-            song_name=prompt_entry["filename"],
-            img_prompt=img_prompt,
-            num_inference_steps=25,
-        )
-        filename = gen.save_image()
-        gen.save_metadata(
-            audio_tags=_store[pid.replace("_p", "")]["features"],
-            genre_tags=_store[pid.replace("_p", "")]["genres"],
-            instrument_tags=_store[pid.replace("_p", "")]["instruments"],
-            llm_description=prompt_entry["prompt"],
-            sdxl_prompt=img_prompt,
-        )
+        filename = None
+        record = None
+        serve_fn = None
 
-        with open(filename, "rb") as f:
-            blob = f.read()
+        if action == "image":
+            img_prompt = llm_sum.summarise_for_image(
+                raw_description=prompt_entry["prompt"]
+            )
 
-        img_record = GeneratedImage(
-            user_id=current_user.id,
-            filename=filename.name,
-            mime_type="image/png",
-            data=blob,
-        )
-        db.session.add(img_record)
+            gen = GenerateImage(
+                llm="deepseek-r1:14b",
+                song_name=prompt_entry["filename"],
+                img_prompt=img_prompt,
+                num_inference_steps=25,
+            )
+            filename = gen.save_image()
+            gen.save_metadata(
+                audio_tags=_store[pid.replace("_p", "")]["features"],
+                genre_tags=_store[pid.replace("_p", "")]["genres"],
+                instrument_tags=_store[pid.replace("_p", "")]["instruments"],
+                llm_description=prompt_entry["prompt"],
+                sdxl_prompt=img_prompt,
+            )
+
+            with open(filename, "rb") as f:
+                blob = f.read()
+
+            record = GeneratedImage(
+                user_id=current_user.id,
+                filename=Path(filename).name,
+                mime_type="image/png",
+                data=blob,
+            )
+            serve_fn = "serve_generated_image"
+
+        elif action == "model":
+            model_prompt = llm_sum.summarise_for_3d(
+                raw_description=prompt_entry["prompt"]
+            )
+            gen = Generate3d(prompt=model_prompt)
+
+            mesh_path = gen.save_meshes(prompt_entry["filename"])
+            if not mesh_path:
+                return jsonify(error="Mesh generation failed"), 500
+
+            abs_path = Path(__file__).parent / "static" / mesh_path
+
+            with open(abs_path, "rb") as f:
+                blob = f.read()
+
+            record = GeneratedModel(
+                user_id=current_user.id,
+                filename=Path(mesh_path).name,
+                mime_type="model/obj",
+                data=blob,
+            )
+            serve_fn = "serve_generated_model"
+        else:
+            return jsonify(error="Invalid action"), 400
+
+        db.session.add(record)
         db.session.commit()
 
-        return jsonify(
-            imageUrl=url_for("serve_generated_image", filename=filename),
-            imageId=img_record.id,
+        url = url_for(serve_fn, filename=record.filename, _external=True)
+
+        return (
+            jsonify(
+                {
+                    "type": action,
+                    "id": record.id,
+                    "filename": record.filename,
+                    "url": url,
+                }
+            ),
+            200,
         )
+
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=str(e)), 500
@@ -288,6 +340,27 @@ def view_image():
 
     url = url_for("serve_generated_image", filename=last_img.filename, _external=False)
     return jsonify({"id": last_img.id, "filename": last_img.filename, "url": url}), 200
+
+
+@app.route("/api/models", methods=["GET"])
+@login_required
+def view_model():
+    last_model = (
+        GeneratedModel.query.filter_by(user_id=current_user.id)
+        .order_by(GeneratedModel.id.desc())
+        .first()
+    )
+
+    if not last_model:
+        return jsonify(error="No model found"), 404
+
+    url = url_for(
+        "serve_generated_model", filename=last_model.filename, _external=False
+    )
+    return (
+        jsonify({"id": last_model.id, "filename": last_model.filename, "url": url}),
+        200,
+    )
 
 
 @app.route("/api/images/<int:image_id>", methods=["DELETE"])

@@ -1,11 +1,12 @@
 from flask import Flask
-from config import Config
+from flask_migrate import Migrate
 from jinja2 import StrictUndefined
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash
 
+from config import Config
 from .modules.settings import Settings
 
 
@@ -19,13 +20,14 @@ app.config["APP_SETTINGS"] = settings
 CORS(app, supports_credentials=True)
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 login = LoginManager(app)
 login.login_message = "Please log in to access this page."
 login.login_message_category = "danger"
 login.login_view = "login"  # type: ignore[attr-defined]
 
-from flask_server.models import User, GeneratedImage
+from flask_server.models import User, GeneratedImage, GeneratedModel
 
 
 @login.user_loader
@@ -40,6 +42,7 @@ def make_shell_context():
         "User": User,
         "generate_password_hash": generate_password_hash,
         "GeneratedImage": GeneratedImage,
+        "GeneratedModel": GeneratedModel
     }
 
 
