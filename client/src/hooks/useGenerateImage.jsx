@@ -6,11 +6,11 @@ export function useGenerateImage() {
   const [imageUrl, setImageUrl] = useState('');
   const [errorStatus, setErrorStatus] = useState('');
 
-  /**
+  /*
    * Kick off the server pipeline using an uploaded file
    * plus optional metadata (title, artist, album, release).
    */
-  const generate = useCallback(async params => {
+  const generate = useCallback(async (type, option, params) => {
     const { file, title, artist, album, release } = params;
 
     setErrorStatus('');
@@ -24,6 +24,8 @@ export function useGenerateImage() {
     // Build one FormData for analyse
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('action', type);
+    formData.append('building', option);
     if (title) formData.append('title', title);
     if (artist) formData.append('artist', artist);
     if (album) formData.append('album', album);
@@ -43,7 +45,10 @@ export function useGenerateImage() {
       res = await fetch('/api/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ analysisId }),
+        body: JSON.stringify({
+          analysisId,
+          building_type: option
+        }),
       });
       json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Describe failed');
@@ -55,7 +60,10 @@ export function useGenerateImage() {
       res = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ promptId }),
+        body: JSON.stringify({
+          promptId,
+          action: type
+        }),
       });
       json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Render failed');
@@ -70,11 +78,11 @@ export function useGenerateImage() {
     }
   }, []);
 
-  /**
+  /*
    * Kick off the server pipeline by downloading a snippet URL,
    * turning it into a File, plus passing along all its metadata.
    */
-  const generateFromUrl = useCallback(async snippetInfo => {
+  const generateFromUrl = useCallback(async (type, option, snippetInfo) => {
     setErrorStatus('');
     setImageUrl('');
 
@@ -95,6 +103,8 @@ export function useGenerateImage() {
       formData.append('file', file);
       formData.append('title', snippetInfo.title);
       formData.append('artist', snippetInfo.artist);
+      formData.append('action', type);
+      formData.append('building', option);
       if (snippetInfo.album) formData.append('album', snippetInfo.album);
       if (snippetInfo.release) formData.append('release', snippetInfo.release);
 
@@ -110,18 +120,24 @@ export function useGenerateImage() {
       res = await fetch('/api/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ analysisId }),
+        body: JSON.stringify({
+          analysisId,
+          building_type: option
+        }),
       });
       json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Describe failed');
       const promptId = json.promptId;
 
       // 3) Render
-      setStatus('Rendering image…');
+      setStatus(`Rendering ${type}…`);
       res = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ promptId }),
+        body: JSON.stringify({
+          promptId,
+          action: type
+        }),
       });
       json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Render failed');
