@@ -19,6 +19,12 @@
     border-bottom: 2px solid black;
 }
 
+.gallery-area>summary:hover {
+    background-color: rgba(0, 0, 0, 0.9);
+    color: white;
+    border-radius: 0.5rem;
+}
+
 .gallery-area[open]>summary::marker {
     transform: rotate(90deg);
 }
