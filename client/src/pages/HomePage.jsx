@@ -7,7 +7,7 @@ import ErrorStatusMessage from '../components/ErrorStatus';
 import LatestImage from '../components/LatestImage';
 import LatestModel from '../components/LatestModel';
 
-import { useGenerateImage } from '../hooks/useGenerateImage';
+import { useGenerate } from '../hooks/useGenerate';
 
 import './HomePage.css';
 
@@ -18,7 +18,7 @@ export default function HomePage() {
     const [refreshKey, setRefreshKey] = useState(0);
     const [option, setOption] = useState('house')
 
-    const { status, errorStatus, generate, generateFromUrl } = useGenerateImage();
+    const { status, errorStatus, generate, generateFromUrl } = useGenerate();
 
     const handleTrackLookup = ({ title, artist, preview_url }) => {
         setQuery(title);
@@ -73,7 +73,6 @@ export default function HomePage() {
                         <option value="house">house</option>
                         <option value="skyscraper">skyscraper</option>
                         <option value="apartments">apartments</option>
-                        <option value="library">library</option>
                     </select>
                 </div>
                 <div className='btn-area'>

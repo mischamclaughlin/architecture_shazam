@@ -189,11 +189,24 @@ def analyse():
 @login_required
 def describe():
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         aid = data.get("analysisId")
+        if not aid:
+            return jsonify(error="Missing analysisId"), 400
+
         entry = _store.get(aid)
         if not entry:
             return jsonify(error="Invalid analysisId"), 400
+
+        building_type = (data.get("building_type") or "house").strip().lower()
+        ALLOWED = {"house", "skyscraper", "apartments"}
+        if building_type not in ALLOWED:
+            return (
+                jsonify(
+                    error=f"Invalid building_type. Allowed: {', '.join(sorted(ALLOWED))}"
+                ),
+                400,
+            )
 
         llm = GenerateLLMDescription(
             llm="deepseek-r1:14b", temperature=0.7, max_tokens=10_000
@@ -204,14 +217,20 @@ def describe():
             instrument_tags=entry["instruments"],
             song_info=entry.get("song_info") or None,
             origin=entry["origin"],
-            building_type="house",
+            building_type=building_type,
         )
-        pid = aid + "_p"
-        _store[pid] = {"prompt": raw, "filename": entry["filename"]}
 
-        return jsonify(promptId=pid)
+        pid = f"{aid}_p"
+        _store[pid] = {
+            "prompt": raw,
+            "filename": entry["filename"],
+            "building_type": building_type,
+        }
+
+        return jsonify(promptId=pid, building_type=building_type), 200
+
     except Exception as e:
-        traceback.print_exc()
+        app.logger.exception("describe failed")
         return jsonify(error=str(e)), 500
 
 
