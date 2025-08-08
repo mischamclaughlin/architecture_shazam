@@ -1,15 +1,11 @@
 // client/src/hooks/useGenerateImage.jsx
 import { useState, useCallback } from 'react';
 
-export function useGenerateImage() {
+export function useGenerate() {
   const [status, setStatus] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [errorStatus, setErrorStatus] = useState('');
 
-  /*
-   * Kick off the server pipeline using an uploaded file
-   * plus optional metadata (title, artist, album, release).
-   */
   const generate = useCallback(async (type, option, params) => {
     const { file, title, artist, album, release } = params;
 
