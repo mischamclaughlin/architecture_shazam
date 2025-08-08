@@ -10,7 +10,7 @@ html,
 body {
     height: 100%;
     margin: 0;
-    background-color: rgba(197, 197, 197, 0.15);
+    background-color: rgba(197, 197, 197, 0.05);
 }
 
 .container {
