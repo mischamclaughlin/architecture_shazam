@@ -12,7 +12,7 @@ import './ImageWithActions.css';
 export default function ImageWithActions({ id, src, alt = '', onDeleted }) {
     const [zoomed, setZoomed] = useState(false)
     const deleteImage = useDeleteImage();
-    const title = alt.split(/mp3|wav|png|m4a/)[0].replaceAll('_', ' ').replaceAll('.', '')
+    const title = alt.split(/mp3|wav|png|m4a/)[0].replaceAll('_', ' ').replaceAll('.', '').slice(0, -15)
 
     const handleDelete = async () => {
         try {
