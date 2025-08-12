@@ -9,7 +9,6 @@ export default function Navbar({ currentUser, onLogout }) {
     return (
         <nav className="navbar-menu">
             <Link to="/">
-                {/* <h1 className="nav-title">Architecture Shazam</h1> */}
                 <img src={logo} alt="Architecture Shazam logo" className="brand-logo" />
             </Link>
 
