@@ -1,5 +1,7 @@
 /* ./client/src/components/StatusInfo.css */
 .status-success {
+    display: flex;
+    flex-direction: column;
     margin: 0 1rem;
     padding: 0;
     background-color: rgb(60, 226, 82);
@@ -16,4 +18,21 @@
     opacity: 1;
     width: 100%;
     transform: translateY(0);
+}
+
+.status-main {
+    font-weight: 600;
+}
+
+.status-sep {
+    opacity: 0.5;
+}
+
+.status-tip {
+    opacity: 0.8;
+}
+
+.status-tip {
+    display: inline-block;
+    transition: opacity 250ms ease;
 }
