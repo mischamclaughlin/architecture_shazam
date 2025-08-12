@@ -15,10 +15,8 @@
 .model {
     display: flex;
     justify-content: center;
-    align-items: center;
     background-color: rgba(215, 215, 215, 0.5);
     margin: 0.25rem 1.5rem;
     border-radius: 0 0 0.5rem 0.5rem;
     padding: 2rem 0;
-    height: 800px;
 }
