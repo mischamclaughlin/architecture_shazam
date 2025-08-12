@@ -6,6 +6,7 @@ from .services.musicbrainz_service import MusicBrainzService
 from .services.wiki_service import WikiService
 from .services.spotify_service import SpotifyService
 from .services.itunes_service import ITunesService
+from .services.meshy_service import MeshyService
 
 # Analysis Tools
 from .analysis.features import AudioFeatureExtractor
