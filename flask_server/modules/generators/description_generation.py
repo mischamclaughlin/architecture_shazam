@@ -1,25 +1,24 @@
-# ./flask_server/modules/generators/llm_description.py
+# ./flask_server/modules/generators/description_generation.py
 import logging
 from typing import Any, Dict, List, Tuple, Optional
-import argparse
-import json
-from pathlib import Path
-from ollama import chat, ResponseError
+from ollama import chat, ResponseError, generate
 from flask_server.modules.logger import default_logger
+
+try:
+    from transformers import CLIPTokenizerFast as _CLIPTokenizer
+except Exception:
+    _CLIPTokenizer = None
 
 
 class GenerateLLMDescription:
     """
     Generates architectural design prompts based on musical analytics by interacting with an Ollama LLM.
-
-    Methods:
-        - build_description_prompt: construct the expert architect concept prompt.
-        - generate_description: send concept prompt to LLM and return response.
-        - build_image_prompt: construct Stable Diffusion XL image prompt.
-        - summarise_for_image: send image prompt, truncate and return.
-        - build_3d_prompt: construct low-poly 3D modelling prompt.
-        - summarise_for_3d: send 3D prompt, truncate and return.
+    Also provides exact SDXL prompt trimming to <=77 CLIP tokens.
     """
+
+    # Cache tokenisers across instances to avoid repeated downloads
+    _tok1 = None
+    _tok2 = None
 
     def __init__(
         self,
@@ -27,11 +26,17 @@ class GenerateLLMDescription:
         temperature: float,
         max_tokens: int,
         logger: Optional[logging.Logger] = None,
+        enable_token_trim: bool = True,
+        tok1_repo: str = "openai/clip-vit-large-patch14",
+        tok2_repo: str = "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k",
     ) -> None:
         self.llm = llm
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.logger = logger or default_logger(__name__)
+        self.enable_token_trim = enable_token_trim
+        self.tok1_repo = tok1_repo
+        self.tok2_repo = tok2_repo
 
     def build_description_prompt(
         self,
@@ -41,10 +46,6 @@ class GenerateLLMDescription:
         origin: Tuple,
         building_type: str,
     ) -> str:
-        """
-        Construct the prompt to generate a concise architectural concept based on musical analytics.
-        """
-
         genres = ", ".join(label for label, _ in genre_tags)
         instruments = ", ".join(label for label, _ in instrument_tags)
 
@@ -64,7 +65,7 @@ class GenerateLLMDescription:
             "   - Rhythm: massing & form\n"
             "   - Tonal colour: material palette & façade brightness\n"
             "   - Energy & timbre: façade articulation\n"
-            "3. Overall look (3-4 sentences): a magazine-style summary emphasising how the genre shapes the design language.\n\n"
+            "3. Overall look (3-4 sentences): a magazine-style summary emphasising how the genre shapes the design language. Make sure to mention the building type.\n\n"
             "Keep the total response under 500 words."
         )
 
@@ -77,10 +78,6 @@ class GenerateLLMDescription:
         origin: Tuple,
         building_type: str,
     ) -> str:
-        """
-        Construct the prompt to generate a concise architectural concept based on musical analytics.
-        """
-
         genres = ", ".join(label for label, _ in genre_tags)
         instruments = ", ".join(label for label, _ in instrument_tags)
         artists = ", ".join(name for name in song_info.get("artists"))
@@ -103,14 +100,11 @@ class GenerateLLMDescription:
             "   - Rhythm: massing & form\n"
             "   - Tonal colour: material palette & façade brightness\n"
             "   - Energy & timbre: façade articulation\n"
-            "3. Overall look (3-4 sentences): a magazine-style summary emphasising how the genre shapes the design language.\n\n"
+            "3. Overall look (3-4 sentences): a magazine-style summary emphasising how the genre shapes the design language. Make sure to mention the building type.\n\n"
             "Keep the total response under 500 words."
         )
 
     def build_image_prompt(self, raw_description: str) -> str:
-        """
-        Construct a Stable Diffusion XL prompt to visualise the entire building exterior.
-        """
         return (
             'Rewrite the following "overall look" description into a visual prompt for Stable Diffusion XL that depicts the entire building exterior—massing, roofline, elevation and context—rather than just a façade. '
             "Use vivid, concrete language to describe the full structure's form, materials, textures and overall silhouette from base to roof. "
@@ -121,9 +115,6 @@ class GenerateLLMDescription:
         )
 
     def build_3d_prompt(self, raw_description: str) -> str:
-        """
-        Construct a concise 3D modelling prompt for low-poly UV-unwrapped geometry.
-        """
         return (
             "Convert the following description into a concise 3D modelling prompt (<75 tokens) that specifies:"
             " full exterior massing & roofline, context/environment, PBR materials, low-poly UV-unwrapped geometry with separate material IDs. "
@@ -141,9 +132,6 @@ class GenerateLLMDescription:
         origin: Tuple,
         building_type: str,
     ) -> str:
-        """
-        Generate the architectural concept by building the prompt and querying the LLM.
-        """
         if song_info:
             prompt = self.build_description_prompt_with_song_info(
                 features, genre_tags, instrument_tags, song_info, origin, building_type
@@ -157,83 +145,155 @@ class GenerateLLMDescription:
         return self.call_ollama(prompt)
 
     def summarise_for_image(self, raw_description: str) -> str:
-        """
-        Generate and truncate an image prompt for Stable Diffusion XL.
-        """
         prompt = self.build_image_prompt(raw_description)
-        return self._run_and_truncate(prompt)
+        self.logger.info(f"LLM Summary Prompt:\n{prompt}")
+        raw = self._run_and_truncate(prompt)
+
+        # Precise SDXL trim (≤77 tokens) if enabled and tokenisers available
+        final = self._sdxl_trim_to_77(raw) if self.enable_token_trim else raw
+        self.logger.info(f"SDXL Prompt (≤77 tokens):\n{final}")
+        return final
 
     def summarise_for_3d(self, raw_description: str) -> str:
-        """
-        Generate and truncate a prompt for 3D modelling.
-        """
         prompt = self.build_3d_prompt(raw_description)
+        self.logger.info(f"LLM Summary Prompt:\n{prompt}")
         return self._run_and_truncate(prompt)
 
     def call_ollama(self, input_prompt: str) -> str:
         """
-        Send a prompt to the Ollama chat API and return the raw text response.
+        Call ollama to run model and generate description.
+        Try chat() first and fallback to generate(), more reliable with newer models.
         """
         try:
-            response = chat(
+            r = chat(
                 model=self.llm,
-                messages=[{"role": "user", "content": input_prompt}],
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Return only the final prompt. No analysis or chain-of-thought.",
+                    },
+                    {"role": "user", "content": input_prompt},
+                ],
                 think=False,
                 options={
                     "temperature": self.temperature,
                     "num_predict": self.max_tokens,
                 },
             )
-            content = response["message"]["content"].strip()
-            return content
+            msg = (
+                r.get("message") if isinstance(r, dict) else getattr(r, "message", None)
+            )
+            content = ""
+            if msg:
+                content = (
+                    msg.get("content")
+                    if isinstance(msg, dict)
+                    else getattr(msg, "content", "")
+                ) or ""
+                content = content.strip()
+            if content:
+                return content
+            self.logger.warning(
+                "chat() returned empty; falling back to generate(). Raw: %r", r
+            )
         except ResponseError as e:
-            self.logger.error(f"Ollama API error ({e.status_code}): {e.error}")
-            raise
+            self.logger.warning("chat() failed (%s). Falling back to generate().", e)
+
+        r = generate(
+            model=self.llm,
+            prompt="Return only the final prompt. No analysis or chain-of-thought.\n\n"
+            + input_prompt,
+            think=False,
+            options={
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens,
+            },
+        )
+        text = (
+            r.get("response") if isinstance(r, dict) else getattr(r, "response", "")
+        ) or ""
+        return text.strip()
 
     def truncate_to_last_sentence(self, text: str) -> str:
-        """
-        Truncate text to end at the last full sentence, based on punctuation.
-        """
-
         idx = max(text.rfind("."), text.rfind("!"), text.rfind("?"))
         if idx != -1 and idx < len(text) - 1:
+            self.logger.info(f"LLM Summary:\n{text}")
             return text[: idx + 1]
+        self.logger.info(f"LLM Summary:\n{text}")
         return text
 
     def _run_and_truncate(self, prompt: str) -> str:
-        """
-        Helper to call Ollama, truncate response, and return final text.
-        """
         raw = self.call_ollama(prompt)
+        self.logger.info(f"LLM RAW:\n{raw}")
         return self.truncate_to_last_sentence(raw)
 
+    def _load_tokenizers(self):
+        """
+        Lazily load SDXL's two CLIP tokenisers.
+        """
+        if _CLIPTokenizer is None:
+            self.logger.warning(
+                "transformers not available; skipping precise CLIP trimming."
+            )
+            return None, None
 
-# Test from command line
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Generate architectural prompts from musical analytics"
-    )
-    parser.add_argument("--llm", required=True, help="Ollama model name")
-    parser.add_argument("--temperature", type=float, default=0.7)
-    parser.add_argument("--max-tokens", type=int, default=256)
-    parser.add_argument("--building-type", required=True)
-    parser.add_argument("--features-json", type=Path, required=True)
-    parser.add_argument("--genre-json", type=Path, required=True)
-    parser.add_argument("--instrument-json", type=Path, required=True)
-    parser.add_argument("--song-json", type=Path, help="Optional song_info JSON file")
-    parser.add_argument(
-        "--origin", nargs=2, metavar=("COUNTRY", "AREA"), help="Origin country and area"
-    )
-    args = parser.parse_args()
+        if GenerateLLMDescription._tok1 is None:
+            try:
+                GenerateLLMDescription._tok1 = _CLIPTokenizer.from_pretrained(
+                    self.tok1_repo
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to load tokenizer {self.tok1_repo}: {e}")
 
-    features = json.loads(args.features_json.read_text())
-    genre_tags = json.loads(args.genre_json.read_text())
-    instrument_tags = json.loads(args.instrument_json.read_text())
-    song_info = json.loads(args.song_json.read_text()) if args.song_json else None
-    origin = tuple(args.origin) if args.origin else ("—", "")
+        if GenerateLLMDescription._tok2 is None:
+            try:
+                GenerateLLMDescription._tok2 = _CLIPTokenizer.from_pretrained(
+                    self.tok2_repo
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to load tokenizer {self.tok2_repo}: {e}")
 
-    gen = GenerateLLMDescription(args.llm, args.temperature, args.max_tokens)
-    desc = gen.generate_description(
-        features, genre_tags, instrument_tags, song_info, origin, args.building_type
-    )
-    print(desc)
+        return GenerateLLMDescription._tok1, GenerateLLMDescription._tok2
+
+    @staticmethod
+    def _clip_trim(tok, text: str, user_max: int = 75) -> str:
+        """
+        Clamp to <= (user_max + 2) tokens with BOS/EOS preserved.
+        """
+        if tok is None:
+            return text
+        enc = tok(text, add_special_tokens=True, truncation=False)
+        ids = enc["input_ids"]
+        if not ids:
+            return text
+
+        bos = ids[0]
+        eos = ids[-1] if tok.eos_token_id is None else tok.eos_token_id
+        inner = ids[1:-1]
+        if len(inner) <= user_max:
+            return text
+
+        inner = inner[:user_max]
+        new_ids = [bos] + inner + [eos]
+
+        # decode without special tokens to avoid stray markers
+        return tok.decode(new_ids, skip_special_tokens=True).strip()
+
+    def _sdxl_trim_to_77(self, text: str) -> str:
+        """
+        Ensure prompt fits in 77 tokens for BOTH SDXL text encoders.
+        """
+        tok1, tok2 = self._load_tokenizers()
+        if tok1 is None or tok2 is None:
+            words = text.split()
+            if len(words) > 75:
+                text = " ".join(words[:75])
+            return text
+
+        t = self._clip_trim(tok1, text, 75)
+        t = self._clip_trim(tok2, t, 75)
+
+        # pass again through tok1 to be extra safe
+        t = self._clip_trim(tok1, t, 75)
+
+        return t
