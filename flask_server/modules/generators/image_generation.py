@@ -1,20 +1,14 @@
 # ./flask_server/modules/generators/image_generation.py
-import argparse
 import json
 import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, cast, List, Tuple
+from typing import Any, Dict, Optional, List, Tuple
 
 import torch
 from PIL import Image
-from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import (
-    StableDiffusionXLPipeline,
-)
-from diffusers.pipelines.stable_diffusion_xl.pipeline_output import (
-    StableDiffusionXLPipelineOutput,
-)
+from diffusers import StableDiffusionXLPipeline
 
 from flask_server.modules.logger import default_logger
 
@@ -46,9 +40,6 @@ class GenerateImage:
         model_name: str = "stabilityai/stable-diffusion-xl-base-1.0",
         logger: Optional[logging.Logger] = None,
     ) -> None:
-        """
-        Initialise with LLM name, song identifier, image prompt, inference steps, SDXL model and logger.
-        """
         self.llm = llm
         self.song_name = (
             song_name.replace("/", "_")
@@ -60,66 +51,81 @@ class GenerateImage:
         self.num_inference_steps = num_inference_steps
         self.model_name = model_name
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         self.device = self._pick_device()
+        self.dtype = self._pick_dtype(self.device)
         self.logger = logger or default_logger(__name__)
 
-        # Safe directory naming
         project_root = Path(__file__).parents[2]
         self.save_dir = project_root / "static" / "images"
         self.save_dir.mkdir(parents=True, exist_ok=True)
+
         self._pipe: Optional[StableDiffusionXLPipeline] = None
 
+    # ---------------- internal: device/dtype ----------------
     def _pick_device(self) -> torch.device:
-        """
-        Select the best available device: CUDA > MPS > CPU.
-        """
         if torch.cuda.is_available():
-            dev = torch.device("cuda")
-        elif torch.backends.mps.is_available():
-            dev = torch.device("mps")
-        else:
-            dev = torch.device("cpu")
-        print(f"Using device: {dev}")
-        return dev
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
 
+    def _pick_dtype(self, device: torch.device):
+        return torch.float16 if device.type == "cuda" else torch.float32
+
+    # ---------------- model loading ----------------
     def load_model(self) -> StableDiffusionXLPipeline:
-        """
-        Lazy-load the Stable Diffusion XL pipeline and warm up.
-        """
         if self._pipe is None:
-            self.logger.info(f"Loading SDXL model: {self.model_name} on {self.device}")
+            self.logger.info(
+                f"Loading SDXL: {self.model_name} on {self.device} ({self.dtype})"
+            )
             pipe = StableDiffusionXLPipeline.from_pretrained(
                 self.model_name,
-                torch_dtype=torch.float32,
+                torch_dtype=self.dtype,
+                use_safetensors=True,
+                safety_checker=None,
+                add_watermarker=False,
             )
+
+            pipe.enable_attention_slicing()
+            pipe.enable_vae_slicing()
+            pipe.enable_vae_tiling()
+
             pipe = pipe.to(self.device)
-            pipe(prompt="warmup", num_inference_steps=1)
+
+            try:
+                _ = pipe(prompt="warmup", num_inference_steps=1).images[0]
+            except Exception:
+                pass
+
             self._pipe = pipe
-        assert self._pipe is not None
         return self._pipe
 
+    # ---------------- generation ----------------
     def create_image(self) -> Image.Image:
-        """
-        Generate an image from the prompt using SDXL.
-        """
-        try:
-            pipe = self.load_model()
-            raw_output = pipe(
-                prompt=self.img_prompt,
-                num_inference_steps=self.num_inference_steps,
-                return_dict=True,
-            )
-            result = cast(StableDiffusionXLPipelineOutput, raw_output)
-            image = result.images[0]
-            return image
-        except Exception as e:
-            self.logger.error(f"Image generation failed: {e}")
-            raise
+        prompt = (self.img_prompt or "").strip()
+        if not prompt:
+            raise ValueError("Empty SDXL prompt")
+
+        self.logger.info(
+            f"SDXL prompt (steps={self.num_inference_steps}): {prompt[:140]}{'…' if len(prompt) > 140 else ''}"
+        )
+
+        pipe = self.load_model()
+
+        out = pipe(
+            prompt=prompt,
+            num_inference_steps=self.num_inference_steps,
+            guidance_scale=6.5,
+            return_dict=True,
+            output_type="pil",
+        )
+        img = out.images[0]
+        return img
+
+    # ---------------- saving ----------------
 
     def save_image(self) -> Path:
-        """
-        Generate and save the image, returning the file path.
-        """
         img = self.create_image()
         filename = f"{self.song_name}_{self.timestamp}.png"
         output_path = self.save_dir / filename
@@ -135,9 +141,6 @@ class GenerateImage:
         llm_description: str,
         sdxl_prompt: str,
     ) -> Path:
-        """
-        Save metadata about the generation to a JSON file, returning its path.
-        """
         meta = ImageMetadata(
             model=self.llm,
             timestamp=self.timestamp,
