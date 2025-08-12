@@ -17,6 +17,7 @@ from flask_server.modules import (
     GenerateLLMDescription,
     GenerateImage,
     Generate3d,
+    MeshyService,
     get_features,
     get_song,
     get_origin,
@@ -209,7 +210,7 @@ def describe():
             )
 
         llm = GenerateLLMDescription(
-            llm="deepseek-r1:14b", temperature=0.7, max_tokens=10_000
+            llm="gpt-oss:20b", temperature=1, max_tokens=10_000
         )
         raw = llm.generate_description(
             features=entry["features"],
@@ -247,10 +248,9 @@ def render_image_or_model():
             return jsonify(error="Invalid promptId"), 400
 
         llm_sum = GenerateLLMDescription(
-            llm="deepseek-r1:14b", temperature=0, max_tokens=75
+            llm="gpt-oss:20b", temperature=0.1, max_tokens=10_000
         )
 
-        filename = None
         record = None
         serve_fn = None
 
@@ -260,12 +260,12 @@ def render_image_or_model():
             )
 
             gen = GenerateImage(
-                llm="deepseek-r1:14b",
+                llm="gpt-oss:20b",
                 song_name=prompt_entry["filename"],
                 img_prompt=img_prompt,
                 num_inference_steps=25,
             )
-            filename = gen.save_image()
+            image_path = gen.save_image()
             gen.save_metadata(
                 audio_tags=_store[pid.replace("_p", "")]["features"],
                 genre_tags=_store[pid.replace("_p", "")]["genres"],
@@ -274,12 +274,12 @@ def render_image_or_model():
                 sdxl_prompt=img_prompt,
             )
 
-            with open(filename, "rb") as f:
+            with open(image_path, "rb") as f:
                 blob = f.read()
 
             record = GeneratedImage(
                 user_id=current_user.id,
-                filename=Path(filename).name,
+                filename=Path(image_path).name,
                 mime_type="image/png",
                 data=blob,
             )
@@ -289,24 +289,52 @@ def render_image_or_model():
             model_prompt = llm_sum.summarise_for_3d(
                 raw_description=prompt_entry["prompt"]
             )
-            gen = Generate3d(prompt=model_prompt)
 
-            mesh_path = gen.save_meshes(prompt_entry["filename"])
-            if not mesh_path:
-                return jsonify(error="Mesh generation failed"), 500
+            try:
+                meshy = MeshyService()
+                saved = meshy.preview_then_texture(
+                    prompt=model_prompt,
+                    name_hint=prompt_entry["filename"],
+                )
 
-            abs_path = Path(__file__).parent / "static" / mesh_path
+                mesh_rel = saved.get("relative")
+                if not mesh_rel:
+                    return jsonify(error="Mesh generation failed (no file)"), 500
 
-            with open(abs_path, "rb") as f:
-                blob = f.read()
+                abs_path = Path(__file__).parent / "static" / mesh_rel
+                with open(abs_path, "rb") as f:
+                    blob = f.read()
 
-            record = GeneratedModel(
-                user_id=current_user.id,
-                filename=Path(mesh_path).name,
-                mime_type="model/obj",
-                data=blob,
-            )
-            serve_fn = "serve_generated_model"
+                record = GeneratedModel(
+                    user_id=current_user.id,
+                    filename=Path(mesh_rel).name,
+                    mime_type="model/gltf-binary",
+                    data=blob,
+                )
+                serve_fn = "serve_generated_model"
+
+            except Exception:
+                traceback.print_exc()
+                gen = Generate3d(prompt=model_prompt)
+
+                mesh_rel_or_str = gen.save_meshes(prompt_entry["filename"])
+                if not mesh_rel_or_str:
+                    return jsonify(error="Mesh generation failed"), 500
+
+                mesh_rel = mesh_rel_or_str
+                abs_path = Path(__file__).parent / "static" / mesh_rel
+
+                with open(abs_path, "rb") as f:
+                    blob = f.read()
+
+                record = GeneratedModel(
+                    user_id=current_user.id,
+                    filename=Path(mesh_rel).name,
+                    mime_type="model/obj",
+                    data=blob,
+                )
+                serve_fn = "serve_generated_model"
+
         else:
             return jsonify(error="Invalid action"), 400
 
@@ -314,7 +342,6 @@ def render_image_or_model():
         db.session.commit()
 
         url = url_for(serve_fn, filename=record.filename, _external=True)
-
         return (
             jsonify(
                 {
@@ -343,6 +370,19 @@ def list_images():
     load_imgs.reverse()
 
     return jsonify(images=load_imgs), 200
+
+
+@app.route("/api/my_models", methods=["GET"])
+@login_required
+def list_models():
+    imgs = GeneratedModel.query.filter_by(user_id=current_user.id).all()
+    load_models = []
+    for model in imgs:
+        url = url_for("serve_generated_model", filename=model.filename, _external=False)
+        load_models.append({"id": model.id, "filename": model.filename, "url": url})
+    load_models.reverse()
+
+    return jsonify(models=load_models), 200
 
 
 @app.route("/api/image", methods=["GET"])
@@ -391,6 +431,17 @@ def delete_image(image_id):
         return jsonify(error="Image not found"), 404
 
     db.session.delete(img)
+    db.session.commit()
+    return jsonify(status="ok"), 200
+
+
+@app.route("/api/models/<int:model_id>", methods=["DELETE"])
+@login_required
+def delete_model(model_id):
+    m = GeneratedModel.query.filter_by(user_id=current_user.id, id=model_id).first()
+    if not m:
+        return jsonify(error="Model not found"), 404
+    db.session.delete(m)
     db.session.commit()
     return jsonify(status="ok"), 200
 
