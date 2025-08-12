@@ -126,7 +126,7 @@ export function useGenerate() {
       const promptId = json.promptId;
 
       // 3) Render
-      setStatus(`Rendering ${type}…`);
+      setStatus(`Rendering ${type}...`);
       res = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
