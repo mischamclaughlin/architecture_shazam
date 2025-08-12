@@ -1,16 +1,17 @@
 /* ./client/src/pages/GalleryPage.css */
+.gallery-page {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2rem;
+}
+
 .gallery-area {
     padding: 0.25rem;
     margin: 0 0.5rem;
     background-color: rgba(215, 215, 215, 0.2);
-    box-shadow: 0 0 4px 0 rgba(0, 0, 0, 0.20);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.20);
     border-radius: 0.5rem;
-}
-
-.gallery-area h3 {
-    margin: 1rem;
-    padding: 0.15rem 0;
-    border-bottom: 2px solid black;
 }
 
 .gallery-area>summary {
@@ -25,11 +26,20 @@
     border-radius: 0.5rem;
 }
 
-.gallery-area[open]>summary::marker {
-    transform: rotate(90deg);
+.gallery-content {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
 }
 
-.gallery-area>img,
-.gallery-area>div {
-    padding: 1rem;
+
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    column-gap: 24px;
+    row-gap: 64px;
+    justify-items: center;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
 }
