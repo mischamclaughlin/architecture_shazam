@@ -1,8 +1,0 @@
-/* ./client/src/components/OBJViewer.css */
-.model-canvas {
-  width: 80%;
-  height: 80%;
-  background-color: #eee;
-  border: 2px solid black;
-  border-radius: 1rem;
-}
