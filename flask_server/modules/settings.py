@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     WIKI_USER_AGENT: str = "ArchitectureShazamScript/0.1 (you@example.com)"
     WIKI_API_URL: str = "https://en.wikipedia.org/w/api.php"
 
+    # Meshy
+    MESHY_API_KEY: str
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
