@@ -116,7 +116,7 @@ class GenerateLLMDescription:
 
     def build_3d_prompt(self, raw_description: str) -> str:
         return (
-            "Convert the following description into a concise 3D modelling prompt (<75 tokens) that specifies:"
+            "Convert the following description 'overall look' into a concise 3D modelling prompt (<800 characters) that specifies:"
             " full exterior massing & roofline, context/environment, PBR materials, low-poly UV-unwrapped geometry with separate material IDs. "
             "Suitable for OBJ/FBX export. Omit interiors, emotions, and close-ups.\n\n"
             f"Description:\n{raw_description}\n\n"
