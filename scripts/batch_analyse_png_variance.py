@@ -91,6 +91,9 @@ def default_group_from_name(stem: str) -> str:
 def build_groups(files: List[Path], mode: str, regex: str) -> Dict[str, List[Path]]:
     groups: Dict[str, List[Path]] = {}
     rx = re.compile(regex) if (mode == "regex" and regex) else None
+    if mode == "all":
+        groups["ALL"] = list(files)
+        return groups
     for p in files:
         if mode == "parent":
             key = p.parent.name
@@ -143,7 +146,7 @@ def main():
     ap.add_argument("root", help="Directory to scan for .png")
     ap.add_argument(
         "--group-by",
-        choices=["auto", "parent", "regex"],
+        choices=["auto", "parent", "regex", "all"],
         default="auto",
         help="auto=strip _YYYYMMDD_HHMMSS; parent=group by folder; regex=use --group-regex",
     )
@@ -155,7 +158,7 @@ def main():
     ap.add_argument(
         "--max-per-group",
         type=int,
-        default=200,
+        default=1000,
         help="Optional cap per group to speed up",
     )
     ap.add_argument("--csv", default="png_group_metrics.csv")
