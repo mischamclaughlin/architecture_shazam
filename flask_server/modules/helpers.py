@@ -1,14 +1,13 @@
 # flask_server/modules/helpers.py
 from typing import Optional, Tuple, List, Dict, Any
-from flask_server.modules import (
-    ITunesService,
-    SpotifyService,
-    GenreClassifier,
-    InstrumentClassifier,
-    AudioFeatureExtractor,
-    ACRCloudService,
-    MusicBrainzService,
-)
+
+from flask_server.modules.services.itunes_service import ITunesService
+from flask_server.modules.services.spotify_service import SpotifyService
+from flask_server.modules.services.acrcloud_service import ACRCloudService
+from flask_server.modules.services.musicbrainz_service import MusicBrainzService
+from flask_server.modules.analysis.classifiers import GenreClassifier
+from flask_server.modules.analysis.classifiers import InstrumentClassifier
+from flask_server.modules.analysis.features import AudioFeatureExtractor
 
 
 def get_spotify_search(song_name: str) -> Dict[str, Any]:
