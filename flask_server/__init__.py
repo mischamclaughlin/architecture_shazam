@@ -1,3 +1,5 @@
+# ./flask_server/__init__.py
+import os
 from flask import Flask
 from flask_migrate import Migrate
 from jinja2 import StrictUndefined
@@ -8,7 +10,6 @@ from werkzeug.security import generate_password_hash
 
 from config import Config
 from .modules.settings import Settings
-
 
 app = Flask(__name__, static_folder="../static/dist", static_url_path="")
 app.jinja_env.undefined = StrictUndefined
@@ -27,7 +28,15 @@ login.login_message = "Please log in to access this page."
 login.login_message_category = "danger"
 login.login_view = "login"  # type: ignore[attr-defined]
 
-from flask_server.models import User, GeneratedImage, GeneratedModel
+# Import ONLY models
+from flask_server.models import (
+    User,
+    GeneratedImage,
+    GeneratedModel,
+    Analysis,
+    Prompt,
+    RenderTask,
+)
 
 
 @login.user_loader
@@ -42,8 +51,13 @@ def make_shell_context():
         "User": User,
         "generate_password_hash": generate_password_hash,
         "GeneratedImage": GeneratedImage,
-        "GeneratedModel": GeneratedModel
+        "GeneratedModel": GeneratedModel,
+        "Analysis": Analysis,
+        "Prompt": Prompt,
+        "RenderTask": RenderTask,
     }
 
 
-from flask_server import server
+# Skip registering routes when doing migrations
+if not os.getenv("FLASK_SKIP_ROUTES"):
+    from flask_server import server
