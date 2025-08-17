@@ -1,0 +1,2 @@
+group,n_images,ahash_mean_hamming,ahash_sd,dhash_mean_hamming,dhash_sd,palette_cosine_mean,palette_cosine_sd,ahash_similarity,dhash_similarity,palette_similarity,repeatability_score
+ALL,100,30.269,5.816,31.651,5.125,0.5933,0.1748,0.527,0.5055,0.5933,53.17
