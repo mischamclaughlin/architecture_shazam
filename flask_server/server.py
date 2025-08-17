@@ -11,13 +11,17 @@ from werkzeug.utils import secure_filename
 import librosa
 
 from flask_server import app
-from flask_server.models import db, User, GeneratedImage, GeneratedModel
+from flask_server.models import (
+    db,
+    User,
+    GeneratedImage,
+    GeneratedModel,
+    Analysis,
+    Prompt,
+    RenderTask,
+)
 
-from flask_server.modules import (
-    GenerateLLMDescription,
-    GenerateImage,
-    Generate3d,
-    MeshyService,
+from flask_server.modules.helpers import (
     get_features,
     get_song,
     get_origin,
@@ -26,14 +30,15 @@ from flask_server.modules import (
     get_spotify_search,
     get_itunes_search,
 )
+from flask_server.modules.generators.description_generation import (
+    GenerateLLMDescription,
+)
+from flask_server.modules.generators.image_generation import GenerateImage
+from flask_server.modules.generators.model_generation import Generate3d
+from flask_server.modules.services.meshy_service import MeshyService
 
-
+# Initialise CORS
 CORS(app)
-
-
-# In-memory store for intermediate results
-# In production swap for Redis or a real DB
-_store = {}
 
 
 @app.route("/static/images/<path:filename>")
@@ -135,52 +140,55 @@ def analyse():
         if not f:
             return jsonify(error="No file"), 400
 
-        title = request.form.get("title", "").strip()
-        ext = Path(f.filename).suffix or ".mp3"
-        if title:
-            safe = secure_filename(title) + ext
-        else:
-            safe = secure_filename(f.filename)
+        # Optional metadata (used when you search + download preview)
+        title = (request.form.get("title") or "").strip()
+        artist = (request.form.get("artist") or "").strip()
+        album = (request.form.get("album") or "").strip() or None
+        release = (request.form.get("release") or "").strip() or None
 
-        tmp = NamedTemporaryFile(suffix=Path(safe).suffix, delete=False)
+        # Save to a temp file
+        ext = Path(f.filename).suffix or ".mp3"
+        safe_name = (
+            secure_filename(title) + ext if title else secure_filename(f.filename)
+        )
+        tmp = NamedTemporaryFile(suffix=Path(safe_name).suffix, delete=False)
         f.save(tmp.name)
         tmp.flush()
 
+        # Audio features
         y, sr = librosa.load(tmp.name, sr=16_000, mono=True)
         features = get_features(y, sr)
 
-        artist = request.form.get("artist", "").strip()
-
-        if title and artist:
-            song_info = {
-                "title": title,
-                "artists": [artist],
-                "album": request.form.get("album", "—"),
-                "release": request.form.get("release", "—"),
-                "genres": [],
-            }
-        else:
+        # If caller did not supply song info, try auto
+        if not title or not artist:
             song_info = get_song(tmp.name)
+            title = song_info.get("title") or title or Path(safe_name).stem
+            artist = (song_info.get("artists") or ["—"])[0]
+            album = song_info.get("album") or album
+            release = song_info.get("release") or release
 
-        genres = get_genres(tmp.name, song_info)
+        genres = get_genres(tmp.name, {"title": title, "artists": [artist]})
         instruments = get_instruments(y, sr)
-        origin = (
-            get_origin(song_info["artists"][0])
-            if song_info.get("artists")
-            else ("—", "—")
+        origin = get_origin(artist) if artist else ("—", "—")
+
+        # Save the analysis
+        analysis = Analysis(
+            user_id=current_user.id,
+            title=title,
+            artist=artist,
+            album=album,
+            release=release,
+            audio_path=tmp.name,
+            features=features,
+            genres=genres,
+            instruments=instruments,
+            origin=origin,
         )
+        db.session.add(analysis)
+        db.session.commit()
 
-        aid = tmp.name
-        _store[aid] = {
-            "features": features,
-            "song_info": song_info,
-            "genres": genres,
-            "instruments": instruments,
-            "origin": origin,
-            "filename": song_info["title"],
-        }
+        return jsonify(analysisId=analysis.id), 200
 
-        return jsonify(analysisId=aid)
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=str(e)), 500
@@ -191,12 +199,17 @@ def analyse():
 def describe():
     try:
         data = request.get_json(silent=True) or {}
-        aid = data.get("analysisId")
-        if not aid:
+        analysis_id = data.get("analysisId")
+        if not analysis_id:
             return jsonify(error="Missing analysisId"), 400
 
-        entry = _store.get(aid)
-        if not entry:
+        # Ensure row belongs to user
+        analysis = (
+            db.session.query(Analysis)
+            .filter(Analysis.id == analysis_id, Analysis.user_id == current_user.id)
+            .first()
+        )
+        if not analysis:
             return jsonify(error="Invalid analysisId"), 400
 
         building_type = (data.get("building_type") or "house").strip().lower()
@@ -209,26 +222,41 @@ def describe():
                 400,
             )
 
+        # LLM settings
+        llm_name = "deepseek-r1:14b"
+        temperature = 1.0
+        max_tokens = 10_000
+
+        # Generate concept text
         llm = GenerateLLMDescription(
-            llm="gpt-oss:20b", temperature=1, max_tokens=10_000
+            llm=llm_name, temperature=temperature, max_tokens=max_tokens
         )
         raw = llm.generate_description(
-            features=entry["features"],
-            genre_tags=entry["genres"],
-            instrument_tags=entry["instruments"],
-            song_info=entry.get("song_info") or None,
-            origin=entry["origin"],
+            features=analysis.features,
+            genre_tags=analysis.genres,
+            instrument_tags=analysis.instruments,
+            song_info=(
+                {"title": analysis.title, "artists": [analysis.artist]}
+                if analysis.title and analysis.artist
+                else None
+            ),
+            origin=analysis.origin,
             building_type=building_type,
         )
 
-        pid = f"{aid}_p"
-        _store[pid] = {
-            "prompt": raw,
-            "filename": entry["filename"],
-            "building_type": building_type,
-        }
+        # Save Prompt
+        prompt = Prompt(
+            analysis_id=analysis.id,
+            building_type=building_type,
+            llm=llm_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            raw_prompt=raw,
+        )
+        db.session.add(prompt)
+        db.session.commit()
 
-        return jsonify(promptId=pid, building_type=building_type), 200
+        return jsonify(promptId=prompt.id, building_type=building_type), 200
 
     except Exception as e:
         app.logger.exception("describe failed")
@@ -240,122 +268,200 @@ def describe():
 def render_image_or_model():
     try:
         data = request.get_json() or {}
-        pid = data.get("promptId")
-        action = data.get("action", "image")
+        prompt_id = data.get("promptId")
+        action = (data.get("action") or "image").strip().lower()
+        seed = data.get("seed")
+        steps = data.get("steps")
 
-        prompt_entry = _store.get(pid)
-        if not prompt_entry:
+        # Join prompt -> analysis (validate owner)
+        prompt = (
+            db.session.query(Prompt)
+            .join(Analysis, Prompt.analysis_id == Analysis.id)
+            .filter(Prompt.id == prompt_id, Analysis.user_id == current_user.id)
+            .first()
+        )
+        if not prompt:
             return jsonify(error="Invalid promptId"), 400
 
+        # Create a RenderTask record (RUNNING)
+        task = RenderTask(
+            prompt_id=prompt.id,
+            action=action,
+            status="RUNNING",
+            seed=seed,
+        )
+        db.session.add(task)
+        db.session.commit()
+
+        # Shared LLM for summarisation
         llm_sum = GenerateLLMDescription(
-            llm="gpt-oss:20b", temperature=0.1, max_tokens=10_000
+            llm=prompt.llm, temperature=0.1, max_tokens=10_000
         )
 
-        record = None
-        serve_fn = None
-
+        # ----- IMAGE PATH -----
         if action == "image":
-            img_prompt = llm_sum.summarise_for_image(
-                raw_description=prompt_entry["prompt"]
-            )
+            # Summarise into a 75-token SDXL prompt
+            sdxl_prompt = llm_sum.summarise_for_image(raw_description=prompt.raw_prompt)
+            task.sdxl_prompt = sdxl_prompt
+            task.inference_steps = int(steps or 25)
+            db.session.commit()
 
+            # Generate image (Stable Diffusion XL)
             gen = GenerateImage(
-                llm="gpt-oss:20b",
-                song_name=prompt_entry["filename"],
-                img_prompt=img_prompt,
-                num_inference_steps=25,
+                llm=prompt.llm,
+                song_name=(prompt.analysis.title or "Untitled"),
+                img_prompt=sdxl_prompt,
+                num_inference_steps=task.inference_steps,
             )
             image_path = gen.save_image()
             gen.save_metadata(
-                audio_tags=_store[pid.replace("_p", "")]["features"],
-                genre_tags=_store[pid.replace("_p", "")]["genres"],
-                instrument_tags=_store[pid.replace("_p", "")]["instruments"],
-                llm_description=prompt_entry["prompt"],
-                sdxl_prompt=img_prompt,
+                audio_tags=prompt.analysis.features,
+                genre_tags=prompt.analysis.genres,
+                instrument_tags=prompt.analysis.instruments,
+                llm_description=prompt.raw_prompt,
+                sdxl_prompt=sdxl_prompt,
             )
 
+            # Persist image blob
             with open(image_path, "rb") as f:
                 blob = f.read()
 
-            record = GeneratedImage(
+            image_row = GeneratedImage(
                 user_id=current_user.id,
                 filename=Path(image_path).name,
                 mime_type="image/png",
                 data=blob,
             )
-            serve_fn = "serve_generated_image"
+            db.session.add(image_row)
 
-        elif action == "model":
-            model_prompt = llm_sum.summarise_for_3d(
-                raw_description=prompt_entry["prompt"]
+            # Finalise task
+            task.status = "SUCCEEDED"
+            task.output_filename = image_row.filename
+            db.session.commit()
+
+            url = url_for(
+                "serve_generated_image", filename=image_row.filename, _external=True
+            )
+            return (
+                jsonify(
+                    {
+                        "type": action,
+                        "id": image_row.id,
+                        "filename": image_row.filename,
+                        "url": url,
+                    }
+                ),
+                200,
             )
 
+        # ----- MODEL PATH -----
+        elif action == "model":
+            # Summarise into low-poly modeling prompt
+            model_prompt = llm_sum.summarise_for_3d(raw_description=prompt.raw_prompt)
+            task.sdxl_prompt = model_prompt  # name is sdxl_prompt in DB, but 3D model prompt is stored here as well
+            db.session.commit()
+
+            # Prefer Meshy; fall back to Shap-E path
             try:
                 meshy = MeshyService()
                 saved = meshy.preview_then_texture(
                     prompt=model_prompt,
-                    name_hint=prompt_entry["filename"],
+                    name_hint=prompt.analysis.title or "Model",
                 )
-
                 mesh_rel = saved.get("relative")
                 if not mesh_rel:
-                    return jsonify(error="Mesh generation failed (no file)"), 500
+                    raise RuntimeError("Mesh generation failed (no file)")
 
                 abs_path = Path(__file__).parent / "static" / mesh_rel
                 with open(abs_path, "rb") as f:
                     blob = f.read()
 
-                record = GeneratedModel(
+                model_row = GeneratedModel(
                     user_id=current_user.id,
                     filename=Path(mesh_rel).name,
                     mime_type="model/gltf-binary",
                     data=blob,
                 )
-                serve_fn = "serve_generated_model"
+                db.session.add(model_row)
+
+                task.status = "SUCCEEDED"
+                task.output_filename = model_row.filename
+                db.session.commit()
+
+                url = url_for(
+                    "serve_generated_model", filename=model_row.filename, _external=True
+                )
+                return (
+                    jsonify(
+                        {
+                            "type": action,
+                            "id": model_row.id,
+                            "filename": model_row.filename,
+                            "url": url,
+                        }
+                    ),
+                    200,
+                )
 
             except Exception:
                 traceback.print_exc()
-                gen = Generate3d(prompt=model_prompt)
 
-                mesh_rel_or_str = gen.save_meshes(prompt_entry["filename"])
-                if not mesh_rel_or_str:
+                # Fallback: your local Generate3d (OBJ)
+                gen3d = Generate3d(prompt=model_prompt)
+                mesh_rel = gen3d.save_meshes(prompt.analysis.title or "Model")
+                if not mesh_rel:
+                    task.status = "FAILED"
+                    task.error = "Mesh generation failed"
+                    db.session.commit()
                     return jsonify(error="Mesh generation failed"), 500
 
-                mesh_rel = mesh_rel_or_str
                 abs_path = Path(__file__).parent / "static" / mesh_rel
-
                 with open(abs_path, "rb") as f:
                     blob = f.read()
 
-                record = GeneratedModel(
+                model_row = GeneratedModel(
                     user_id=current_user.id,
                     filename=Path(mesh_rel).name,
                     mime_type="model/obj",
                     data=blob,
                 )
-                serve_fn = "serve_generated_model"
+                db.session.add(model_row)
+
+                task.status = "SUCCEEDED"
+                task.output_filename = model_row.filename
+                db.session.commit()
+
+                url = url_for(
+                    "serve_generated_model", filename=model_row.filename, _external=True
+                )
+                return (
+                    jsonify(
+                        {
+                            "type": action,
+                            "id": model_row.id,
+                            "filename": model_row.filename,
+                            "url": url,
+                        }
+                    ),
+                    200,
+                )
 
         else:
+            task.status = "FAILED"
+            task.error = f"Invalid action: {action}"
+            db.session.commit()
             return jsonify(error="Invalid action"), 400
-
-        db.session.add(record)
-        db.session.commit()
-
-        url = url_for(serve_fn, filename=record.filename, _external=True)
-        return (
-            jsonify(
-                {
-                    "type": action,
-                    "id": record.id,
-                    "filename": record.filename,
-                    "url": url,
-                }
-            ),
-            200,
-        )
 
     except Exception as e:
         traceback.print_exc()
+        # Try to mark task failed if it exists
+        try:
+            if "task" in locals():
+                task.status = "FAILED"
+                task.error = str(e)
+                db.session.commit()
+        except Exception:
+            pass
         return jsonify(error=str(e)), 500
 
 
