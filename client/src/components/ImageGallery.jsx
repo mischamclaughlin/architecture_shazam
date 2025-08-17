@@ -20,7 +20,7 @@ export default function ImageGallery() {
                         id={img.id}
                         src={img.url}
                         alt={img.filename}
-                        onDeleted={() => reloadImages()}
+                        onDeleted={reloadImages}
                     />
                 </div>
             ))}

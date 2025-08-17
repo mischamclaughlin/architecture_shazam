@@ -7,7 +7,7 @@ import { loadMyModels } from '../hooks/loadMyModels';
 import "./GalleryPage.css";
 
 export default function GalleryPage() {
-    const { images, loadingImages } = loadMyImages();
+    const { images, loadingImages, reloadImages } = loadMyImages();
     const { models, loadingModels, reloadModels } = loadMyModels();
 
     return (
@@ -16,7 +16,7 @@ export default function GalleryPage() {
                 <details className="gallery-area" open>
                     <summary>Image Gallery</summary>
                     <div className="gallery-content">
-                        <ImageGallery images={images} />
+                        <ImageGallery images={images} onReload={reloadImages} />
                     </div>
                 </details>
             )}
