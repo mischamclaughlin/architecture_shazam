@@ -140,7 +140,7 @@ def analyse():
         if not f:
             return jsonify(error="No file"), 400
 
-        # Optional metadata (used when you search + download preview)
+        # Optional metadata (used when search + download preview)
         title = (request.form.get("title") or "").strip()
         artist = (request.form.get("artist") or "").strip()
         album = (request.form.get("album") or "").strip() or None
@@ -194,6 +194,7 @@ def analyse():
         return jsonify(error=str(e)), 500
 
 
+# Could refactor into helpers - not priority
 @app.route("/api/describe", methods=["POST"])
 @login_required
 def describe():
