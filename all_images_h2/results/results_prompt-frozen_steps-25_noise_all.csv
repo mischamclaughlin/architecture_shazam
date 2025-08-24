@@ -1,0 +1,2 @@
+group,n_images,lap_var_mean,lap_var_sd,hf_ratio_mean,hf_ratio_sd,resid_rms_mean,resid_rms_sd,noise_index_mean,noise_index_sd
+ALL,100,0.014938,0.00765,0.01051,0.004769,0.029253,0.006071,37.58,27.36
