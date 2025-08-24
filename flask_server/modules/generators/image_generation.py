@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, List, Tuple
 
 import torch
 from PIL import Image
-from diffusers import StableDiffusionXLPipeline
+from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
 
 from flask_server.modules.logger import default_logger
 
@@ -23,12 +23,17 @@ class ImageMetadata:
     llm_description: str
     sdxl_prompt: str
     num_inference_steps: int
+    guidance_scale: float
+    height: int
+    width: int
+    negative_prompt: Optional[str]
+    scheduler: str
     device: str
 
 
 class GenerateImage:
     """
-    Generate and save Stable Diffusion XL images for a song, plus metadata.
+    Generate and save Stable Diffusion XL images for a song, plus a metadata sidecar.
     """
 
     def __init__(
@@ -38,6 +43,10 @@ class GenerateImage:
         img_prompt: str,
         num_inference_steps: int,
         model_name: str = "stabilityai/stable-diffusion-xl-base-1.0",
+        guidance_scale: float = 6.5,
+        height: int = 1024,
+        width: int = 1024,
+        negative_prompt: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self.llm = llm
@@ -48,8 +57,12 @@ class GenerateImage:
             .replace(".", "_")
         )
         self.img_prompt = img_prompt
-        self.num_inference_steps = num_inference_steps
+        self.num_inference_steps = int(num_inference_steps)
         self.model_name = model_name
+        self.guidance_scale = float(guidance_scale)
+        self.height = int(height)
+        self.width = int(width)
+        self.negative_prompt = negative_prompt
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         self.device = self._pick_device()
@@ -71,6 +84,7 @@ class GenerateImage:
         return torch.device("cpu")
 
     def _pick_dtype(self, device: torch.device):
+        # SDXL typically benefits from fp16 on CUDA; use fp32 elsewhere
         return torch.float16 if device.type == "cuda" else torch.float32
 
     # ---------------- model loading ----------------
@@ -86,13 +100,19 @@ class GenerateImage:
                 safety_checker=None,
                 add_watermarker=False,
             )
+            # Force DPM-Solver++ (multistep)
+            pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+                pipe.scheduler.config
+            )
 
+            # memory-friendly toggles
             pipe.enable_attention_slicing()
             pipe.enable_vae_slicing()
             pipe.enable_vae_tiling()
 
             pipe = pipe.to(self.device)
 
+            # quick warmup (safe to ignore failures)
             try:
                 _ = pipe(prompt="warmup", num_inference_steps=1).images[0]
             except Exception:
@@ -108,23 +128,24 @@ class GenerateImage:
             raise ValueError("Empty SDXL prompt")
 
         self.logger.info(
-            f"SDXL prompt (steps={self.num_inference_steps}): {prompt[:140]}{'…' if len(prompt) > 140 else ''}"
+            f"SDXL prompt (steps={self.num_inference_steps}, guidance={self.guidance_scale}, "
+            f"size={self.width}x{self.height}): {prompt[:140]}{'…' if len(prompt) > 140 else ''}"
         )
 
         pipe = self.load_model()
-
         out = pipe(
             prompt=prompt,
+            negative_prompt=self.negative_prompt,
             num_inference_steps=self.num_inference_steps,
-            guidance_scale=6.5,
+            guidance_scale=self.guidance_scale,
+            height=self.height,
+            width=self.width,
             return_dict=True,
             output_type="pil",
         )
-        img = out.images[0]
-        return img
+        return out.images[0]
 
     # ---------------- saving ----------------
-
     def save_image(self) -> Path:
         img = self.create_image()
         filename = f"{self.song_name}_{self.timestamp}.png"
@@ -141,6 +162,7 @@ class GenerateImage:
         llm_description: str,
         sdxl_prompt: str,
     ) -> Path:
+        pipe = self.load_model()
         meta = ImageMetadata(
             model=self.llm,
             timestamp=self.timestamp,
@@ -150,6 +172,11 @@ class GenerateImage:
             llm_description=llm_description,
             sdxl_prompt=sdxl_prompt,
             num_inference_steps=self.num_inference_steps,
+            guidance_scale=self.guidance_scale,
+            height=self.height,
+            width=self.width,
+            negative_prompt=self.negative_prompt,
+            scheduler=pipe.scheduler.__class__.__name__,
             device=str(self.device),
         )
         json_path = self.save_dir / f"metadata_{self.song_name}_{self.timestamp}.json"
