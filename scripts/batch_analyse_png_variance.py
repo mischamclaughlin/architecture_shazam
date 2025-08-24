@@ -1,8 +1,8 @@
-# script/batch_analyse_png_variance.py
+# ./scripts/batch_analyse_png_variance.py
 import csv
 import argparse, re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import numpy as np
 from PIL import Image
 
@@ -20,6 +20,43 @@ def dhash(img: Image.Image, hash_size: int = 8) -> np.ndarray:
     a = np.asarray(g, dtype=np.float32)
     diff = a[:, 1:] > a[:, :-1]
     return diff.astype(np.uint8).ravel()
+
+
+# --- pHash (DCT-based) with OpenCV/Scipy fallback ---
+def _dct2(a: np.ndarray) -> np.ndarray:
+    # Try OpenCV (fast), else SciPy, else raise a clear error.
+    try:
+        import cv2
+
+        return cv2.dct(a.astype(np.float32))
+    except Exception:
+        try:
+            from scipy.fftpack import dct
+
+            return dct(dct(a.astype(np.float32), norm="ortho").T, norm="ortho").T
+        except Exception as e:
+            raise RuntimeError(
+                "pHash requested but neither OpenCV (cv2) nor SciPy is available for DCT."
+            ) from e
+
+
+def phash(img: Image.Image, hash_size: int = 8, highfreq: int = 32) -> np.ndarray:
+    """
+    pHash: 1) grayscale + resize to highfreq×highfreq
+           2) 2D DCT
+           3) take top-left hash_size×hash_size (low-freq block)
+           4) threshold by median (excluding DC term)
+    Returns 64 bits as a 0/1 np.ndarray.
+    """
+    g = img.convert("L").resize((highfreq, highfreq), Image.Resampling.LANCZOS)
+    a = np.asarray(g, dtype=np.float32)
+    d = _dct2(a)
+    low = d[:hash_size, :hash_size]
+    if low.size >= 4:
+        med = np.median(low[1:, 1:])  # exclude DC
+    else:
+        med = np.median(low)
+    return (low > med).astype(np.uint8).ravel()
 
 
 def hamming(a: np.ndarray, b: np.ndarray) -> int:
@@ -168,7 +205,12 @@ def main():
         help="Also compute CLIP distances (requires open_clip_torch)",
     )
 
-    # Weights for combined repeatability score (default: structure heavy)
+    # Toggles and weights
+    ap.add_argument(
+        "--phash",
+        action="store_true",
+        help="Compute pHash (DCT-based) metrics as well",
+    )
     ap.add_argument(
         "--w-ahash", type=float, default=0.4, help="Weight for aHash similarity"
     )
@@ -182,6 +224,12 @@ def main():
         help="Weight for palette (color) similarity",
     )
     ap.add_argument(
+        "--w-phash",
+        type=float,
+        default=0.0,
+        help="Weight for pHash similarity (used when --phash)",
+    )
+    ap.add_argument(
         "--w-clip",
         type=float,
         default=0.0,
@@ -189,6 +237,12 @@ def main():
     )
 
     args = ap.parse_args()
+
+    # Guard weights vs toggles
+    if not args.phash and args.w_phash > 0:
+        print("[warn] --w-phash > 0 but --phash not set; pHash weight will be ignored.")
+    if not args.clip and args.w_clip > 0:
+        print("[warn] --w-clip > 0 but --clip not set; CLIP weight will be ignored.")
 
     root = Path(args.root)
     files = sorted(root.rglob("*.png"))
@@ -205,9 +259,7 @@ def main():
         if clip_tuple[0] is None:
             clip_tuple = None
             if args.w_clip > 0:
-                print(
-                    "[warn] --w-clip > 0 but CLIP is unavailable; ignoring CLIP weight"
-                )
+                print("[warn] --w-clip > 0 but CLIP unavailable; ignoring CLIP weight")
 
     rows = []
     print(f"Found {len(files)} PNGs in {len(groups)} group(s).")
@@ -217,7 +269,9 @@ def main():
         if args.max_per_group and len(paths) > args.max_per_group:
             paths = paths[: args.max_per_group]
 
-        ah_list, dh_list, hist_list, clip_list = [], [], [], []
+        ah_list, dh_list, hist_list = [], [], []
+        ph_list: Optional[List[np.ndarray]] = [] if args.phash else None
+        clip_list = []
 
         for p in paths:
             try:
@@ -227,6 +281,13 @@ def main():
             ah_list.append(ahash(img))
             dh_list.append(dhash(img))
             hist_list.append(color_hist(img))
+            if ph_list is not None:
+                try:
+                    ph_list.append(phash(img))
+                except Exception as e:
+                    # If pHash fails for any reason, drop it cleanly
+                    ph_list = None
+                    print(f"[warn] pHash disabled due to error: {e}")
             if clip_tuple:
                 model, preprocess, device = clip_tuple
                 clip_list.append(clip_embed(img, model, preprocess, device))
@@ -249,6 +310,15 @@ def main():
         dh_sim = clamp01(1.0 - (dh_mean / 64.0))
         pal_sim = clamp01(pal_mean)
 
+        # pHash (optional)
+        ph_mean = ph_sd = None
+        ph_sim = None
+        if ph_list and len(ph_list) >= 2:
+            ph_dists = pairwise_distances_hash(ph_list)  # 0..64
+            ph_mean, ph_sd = pairwise_stats(ph_dists)
+            ph_sim = clamp01(1.0 - (ph_mean / 64.0))
+
+        # CLIP (optional)
         clip_sim = None
         clip_dist_mean = None
         clip_dist_sd = None
@@ -262,11 +332,18 @@ def main():
 
         # Combined score (0..100). Higher = more repeatable.
         wa, wd, wp = args.w_ahash, args.w_dhash, args.w_palette
+        wph = args.w_phash if (ph_sim is not None) else 0.0
         wc = args.w_clip if (clip_tuple and clip_sim is not None) else 0.0
-        wsum = max(1e-8, wa + wd + wp + wc)
+        wsum = max(1e-8, wa + wd + wp + wph + wc)
         combined = (
             100.0
-            * (wa * ah_sim + wd * dh_sim + wp * pal_sim + wc * (clip_sim or 0.0))
+            * (
+                wa * ah_sim
+                + wd * dh_sim
+                + wp * pal_sim
+                + wph * (ph_sim or 0.0)
+                + wc * (clip_sim or 0.0)
+            )
             / wsum
         )
 
@@ -287,6 +364,11 @@ def main():
             "repeatability_score": round(combined, 2),
         }
 
+        if ph_sim is not None and ph_mean is not None:
+            row["phash_mean_hamming"] = round(ph_mean, 3)
+            row["phash_sd"] = round(ph_sd, 3)
+            row["phash_similarity"] = round(ph_sim, 4)
+
         if clip_tuple and clip_sim is not None:
             row["clip_dist_mean"] = round(clip_dist_mean, 4)
             row["clip_dist_sd"] = round(clip_dist_sd, 4)
@@ -298,11 +380,13 @@ def main():
         preview = (
             f"[{key}] n={n} | aHash Δ={row['ahash_mean_hamming']}±{row['ahash_sd']} "
             f"| dHash Δ={row['dhash_mean_hamming']}±{row['dhash_sd']} "
-            f"| Palette sim={row['palette_similarity']} "
-            f"| Score={row['repeatability_score']:.1f}"
+            f"| Palette sim={row['palette_similarity']}"
         )
+        if "phash_mean_hamming" in row:
+            preview += f" | pHash Δ={row['phash_mean_hamming']}±{row['phash_sd']}"
         if "clip_similarity" in row:
             preview += f" | CLIP sim={row['clip_similarity']}"
+        preview += f" | Score={row['repeatability_score']:.1f}"
         print(preview)
 
     # Write CSV (sorted by score desc)
@@ -315,7 +399,7 @@ def main():
             w.writerows(rows_sorted)
         print(f"\nWrote: {args.csv}")
 
-        # Print a compact ranking
+        # Compact ranking
         print("\nOverall repeatability ranking (top 20):")
         for r in rows_sorted[:20]:
             print(f"  {r['group']}: {r['repeatability_score']:.1f} (n={r['n_images']})")

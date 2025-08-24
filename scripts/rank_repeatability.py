@@ -1,4 +1,4 @@
-# scripts/rank_repeatability.py
+# ./scripts/rank_repeatability.py
 import argparse, csv, sys
 from pathlib import Path
 
