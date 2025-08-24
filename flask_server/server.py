@@ -273,6 +273,8 @@ def render_image_or_model():
         action = (data.get("action") or "image").strip().lower()
         seed = data.get("seed")
         steps = data.get("steps")
+        freeze = bool(data.get("freeze"))
+        override_sdxl = data.get("sdxl_prompt")
 
         # Join prompt -> analysis (validate owner)
         prompt = (
@@ -284,7 +286,23 @@ def render_image_or_model():
         if not prompt:
             return jsonify(error="Invalid promptId"), 400
 
-        # Create a RenderTask record (RUNNING)
+        # helper: fetch last succeeded prompt for this promptId/action
+        def latest_cached_prompt(pid: int, act: str) -> str | None:
+            return (
+                db.session.query(RenderTask.sdxl_prompt)
+                .filter(
+                    RenderTask.prompt_id == pid,
+                    RenderTask.action == act,
+                    RenderTask.status == "SUCCEEDED",
+                    RenderTask.sdxl_prompt.isnot(None),
+                    RenderTask.sdxl_prompt != "",
+                )
+                .order_by(RenderTask.id.desc())
+                .limit(1)
+                .scalar()
+            )
+
+        # Create a RenderTask record
         task = RenderTask(
             prompt_id=prompt.id,
             action=action,
@@ -294,20 +312,28 @@ def render_image_or_model():
         db.session.add(task)
         db.session.commit()
 
-        # Shared LLM for summarisation
         llm_sum = GenerateLLMDescription(
             llm=prompt.llm, temperature=0.1, max_tokens=10_000
         )
 
         # ----- IMAGE PATH -----
         if action == "image":
-            # Summarise into a 75-token SDXL prompt
-            sdxl_prompt = llm_sum.summarise_for_image(raw_description=prompt.raw_prompt)
+            # Decide prompt: override > frozen cache > generate new
+            if override_sdxl:
+                sdxl_prompt = override_sdxl
+            elif freeze:
+                sdxl_prompt = latest_cached_prompt(
+                    prompt.id, "image"
+                ) or llm_sum.summarise_for_image(raw_description=prompt.raw_prompt)
+            else:
+                sdxl_prompt = llm_sum.summarise_for_image(
+                    raw_description=prompt.raw_prompt
+                )
+
             task.sdxl_prompt = sdxl_prompt
-            task.inference_steps = int(steps or 25)
+            task.inference_steps = int(steps or 10)
             db.session.commit()
 
-            # Generate image (Stable Diffusion XL)
             gen = GenerateImage(
                 llm=prompt.llm,
                 song_name=(prompt.analysis.title or "Untitled"),
@@ -323,7 +349,6 @@ def render_image_or_model():
                 sdxl_prompt=sdxl_prompt,
             )
 
-            # Persist image blob
             with open(image_path, "rb") as f:
                 blob = f.read()
 
@@ -335,7 +360,6 @@ def render_image_or_model():
             )
             db.session.add(image_row)
 
-            # Finalise task
             task.status = "SUCCEEDED"
             task.output_filename = image_row.filename
             db.session.commit()
@@ -350,6 +374,10 @@ def render_image_or_model():
                         "id": image_row.id,
                         "filename": image_row.filename,
                         "url": url,
+                        "steps": task.inference_steps,
+                        "sdxl_prompt": sdxl_prompt,
+                        "prompt_id": prompt.id,
+                        "frozen": bool(freeze or override_sdxl),
                     }
                 ),
                 200,
@@ -357,12 +385,20 @@ def render_image_or_model():
 
         # ----- MODEL PATH -----
         elif action == "model":
-            # Summarise into low-poly modeling prompt
-            model_prompt = llm_sum.summarise_for_3d(raw_description=prompt.raw_prompt)
-            task.sdxl_prompt = model_prompt  # name is sdxl_prompt in DB, but 3D model prompt is stored here as well
+            if override_sdxl:
+                model_prompt = override_sdxl
+            elif freeze:
+                model_prompt = latest_cached_prompt(
+                    prompt.id, "model"
+                ) or llm_sum.summarise_for_3d(raw_description=prompt.raw_prompt)
+            else:
+                model_prompt = llm_sum.summarise_for_3d(
+                    raw_description=prompt.raw_prompt
+                )
+
+            task.sdxl_prompt = model_prompt
             db.session.commit()
 
-            # Prefer Meshy; fall back to Shap-E path
             try:
                 meshy = MeshyService()
                 saved = meshy.preview_then_texture(
@@ -399,6 +435,9 @@ def render_image_or_model():
                             "id": model_row.id,
                             "filename": model_row.filename,
                             "url": url,
+                            "sdxl_prompt": model_prompt,
+                            "prompt_id": prompt.id,
+                            "frozen": bool(freeze or override_sdxl),
                         }
                     ),
                     200,
@@ -406,8 +445,6 @@ def render_image_or_model():
 
             except Exception:
                 traceback.print_exc()
-
-                # Fallback: your local Generate3d (OBJ)
                 gen3d = Generate3d(prompt=model_prompt)
                 mesh_rel = gen3d.save_meshes(prompt.analysis.title or "Model")
                 if not mesh_rel:
@@ -442,6 +479,9 @@ def render_image_or_model():
                             "id": model_row.id,
                             "filename": model_row.filename,
                             "url": url,
+                            "sdxl_prompt": model_prompt,
+                            "prompt_id": prompt.id,
+                            "frozen": bool(freeze or override_sdxl),
                         }
                     ),
                     200,
@@ -455,7 +495,6 @@ def render_image_or_model():
 
     except Exception as e:
         traceback.print_exc()
-        # Try to mark task failed if it exists
         try:
             if "task" in locals():
                 task.status = "FAILED"
