@@ -1,6 +1,9 @@
 /* ./client/src/compents/Footer.css */
 .footer-menu {
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5rem;
     margin-top: 2rem;
     background-color: rgba(0, 0, 0, 0.9);
     color: white;
