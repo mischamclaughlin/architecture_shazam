@@ -47,9 +47,9 @@ See the report’s Results chapter for details, tables, and exemplars.
 #### 1) Clone & set up backend
 
 ```bash
-git clone https://git.cs.bham.ac.uk/projects-2024-25/mxm1646.git
+git clone https://github.com/mischamclaughlin/architecture_shazam.git
 
-cd mxm1646/
+cd architecture_shazam/
 
 python -m venv .venv
 source .venv/bin/activate # Windows: .venv\Scripts\activate
